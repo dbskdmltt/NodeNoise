@@ -1,0 +1,16 @@
+{
+  "name": "collector",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "collect.mjs",
+  "scripts": {
+    "collect": "node collect.mjs",
+    "backfill-notion": "node backfill-notion.mjs"
+  },
+  "dependencies": {
+    "@notionhq/client": "^2.2.15",
+    "dotenv": "^16.4.5",
+    "rss-parser": "^3.13.0"
+  }
+}

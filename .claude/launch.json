@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "node-noise-client",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "client", "--config", "client/vite.config.ts"],
+      "port": 5173
+    },
+    {
+      "name": "node-noise-server",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["--watch", "server/index.js"],
+      "port": 3001
+    },
+    {
+      "name": "threejs-learn",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["C:\\ThreeJsLearn\\server.js"],
+      "port": 4322
+    }
+  ]
+}
