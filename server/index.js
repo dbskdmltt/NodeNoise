@@ -1,7 +1,7 @@
-import "dotenv/config";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import { getReply, TOPICS } from "./llm.js";
@@ -9,6 +9,8 @@ import { getLetters, addLetter } from "./letters.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_DIST = path.join(__dirname, "..", "client", "dist");
+
+dotenv.config({ path: path.join(__dirname, ".env") });
 
 const app = express();
 app.use(cors());
