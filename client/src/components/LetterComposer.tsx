@@ -15,7 +15,7 @@ export function LetterComposer({ draftLetter, onChange }: LetterComposerProps) {
     <div className="letter-composer">
       <div className="letter-composer-header">편지 쓰기</div>
       <p className="letter-composer-hint">
-        마이 이야기를 듣고 편지를 쓰고 싶어졌다면, 여기서 써보세요. 3D 월드에서 이 편지를 들고
+        누누 이야기를 듣고 편지를 쓰고 싶어졌다면, 여기서 써보세요. 3D 월드에서 이 편지를 들고
         우체국으로 갈 수 있어요.
       </p>
       <textarea

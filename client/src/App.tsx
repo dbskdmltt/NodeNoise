@@ -13,7 +13,7 @@ const LETTER_QUESTION = "편지는 왜 보내세요?";
 const INTRO_MESSAGE: ChatMessage = {
   id: "intro",
   role: "assistant",
-  text: "안녕하세요. 저는 마이예요. 연천 백학면에서 11년째 살고 있어요. 여기서 조금만 걸으면 철책이 보여요. 처음엔 다 낯설었는데 이제는 그냥 제 동네예요.",
+  text: "안녕하세요. 저는 누누예요. 파주 민통선 마을에서 9년째 살고 있어요. 여기서 조금만 걸으면 철책이 보여요. 처음엔 다 낯설었는데 이제는 그냥 제 동네예요.",
 };
 
 function newId() {
@@ -165,9 +165,9 @@ export default function App() {
             </div>
 
             <ChatPanel
-              personaName="마이 응우옌 (35세)"
-              personaSubtitle="연천 백학면 거주 · 한국 거주 11년차"
-              avatarInitial="마"
+              personaName="누누 아웅 (33세)"
+              personaSubtitle="파주 민통선 마을 거주 · 한국 거주 9년차"
+              avatarInitial="누"
               messages={messages}
               loading={loading}
               onSend={handleSend}

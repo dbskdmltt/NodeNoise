@@ -84,8 +84,8 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
 
       {stage === "locked" && (
         <MessengerBox
-          speaker="마이"
-          text={"아직 이유를 잘 모르겠어요...\n마이와 먼저 이야기해봐요."}
+          speaker="누누"
+          text={"아직 이유를 잘 모르겠어요...\n누누와 먼저 이야기해봐요."}
           primaryAction={{
             label: "대화하러 가기",
             onClick: () => {
@@ -98,7 +98,7 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
 
       {stage === "no-draft" && (
         <MessengerBox
-          speaker="마이"
+          speaker="누누"
           text={"아직 편지를 쓰지 않았어요.\n대화창 아래에서 편지를 먼저 써보세요."}
           primaryAction={{
             label: "대화하러 가기",
@@ -179,7 +179,7 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
 
       {stage === "failed" && (
         <MessengerBox
-          speaker="마이"
+          speaker="누누"
           text="편지는... 부쳐지지 않았습니다."
           primaryAction={{ label: "확인", onClick: () => setStage("archived") }}
         />
@@ -187,7 +187,7 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
 
       {stage === "archived" && (
         <MessengerBox
-          speaker="마이"
+          speaker="누누"
           text={"이 편지는 '보내지 못한 편지함'에 보관되었습니다.\n다른 사람들의 편지도 그곳에 있어요."}
           primaryAction={{
             label: "편지함 보러가기",

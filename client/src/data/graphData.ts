@@ -12,7 +12,7 @@ export const CATEGORY_LABELS: Record<NodeCategory, string> = {
 
 export const NODES: GraphNode[] = [
   // human
-  { id: "mai", label: "마이\n응우옌", category: "human", radius: 28 },
+  { id: "mai", label: "누누\n아웅", category: "human", radius: 28 },
   { id: "husband", label: "남편", category: "human", radius: 16 },
   { id: "children", label: "아이들", category: "human", radius: 16 },
   { id: "mother-in-law", label: "시어머니", category: "human", radius: 14 },
@@ -51,6 +51,8 @@ export const NODES: GraphNode[] = [
   { id: "care-worker", label: "요양\n보호사", category: "nonhuman", radius: 14 },
   { id: "multicultural-award", label: "다문화\n시상식", category: "nonhuman", radius: 14 },
   { id: "essay-contest", label: "생활수기\n공모전", category: "nonhuman", radius: 14 },
+  { id: "landmine", label: "미확인\n지뢰", category: "nonhuman", radius: 14 },
+  { id: "control-line-shift", label: "민통선\n북상", category: "nonhuman", radius: 14 },
 ];
 
 export const EDGES: GraphEdge[] = [
@@ -74,6 +76,12 @@ export const EDGES: GraphEdge[] = [
   { source: "checkpoint", target: "pass" },
   { source: "checkpoint", target: "soldiers" },
   { source: "checkpoint", target: "military-base" },
+
+  // control line (grounded in real reporting on Haemaru-chon landmines and the control-line relocation)
+  { source: "fence", target: "landmine", highlighted: true },
+  { source: "children", target: "landmine" },
+  { source: "checkpoint", target: "control-line-shift" },
+  { source: "dmz", target: "control-line-shift" },
 
   // river / dam (grounded in real Imjin River flood-alert reporting)
   { source: "husband", target: "imjin-river", highlighted: true },
