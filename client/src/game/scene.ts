@@ -15,8 +15,9 @@ export interface SceneHandle {
 
 const MOVE_SPEED = 3.6;
 const ARRIVE_EPSILON = 0.08;
-const CAMERA_OFFSET = new THREE.Vector3(0, 7.4, 8.6);
-const LOOK_OFFSET = new THREE.Vector3(0, 0.6, 0.6);
+const RUN_DISTANCE = 4.5; // clicks farther than this trigger the run cycle instead of walk
+const CAMERA_OFFSET = new THREE.Vector3(0, 5.0, 5.8);
+const LOOK_OFFSET = new THREE.Vector3(0, 0.7, 0.4);
 const CAMERA_FOLLOW_SPEED = 3.5;
 
 export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks): SceneHandle {
@@ -41,6 +42,7 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
   let pendingPostboxInteract = false;
   let checkpointPassed = false;
   let resumeToPostbox = false;
+  let tripRunning = false;
 
   function clampToWalkBounds(point: THREE.Vector3) {
     point.x = Math.min(env.walkBounds.maxX, Math.max(env.walkBounds.minX, point.x));
@@ -62,6 +64,7 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
     if (postboxHit.length > 0) {
       moveTarget = env.postboxStandPoint.clone();
       pendingPostboxInteract = true;
+      tripRunning = moveTarget.distanceTo(character.group.position) > RUN_DISTANCE;
       return;
     }
 
@@ -69,6 +72,7 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
     if (raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
       moveTarget = clampToWalkBounds(hitPoint);
       pendingPostboxInteract = false;
+      tripRunning = moveTarget.distanceTo(character.group.position) > RUN_DISTANCE;
     }
   }
 
@@ -113,8 +117,8 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
         const step = Math.min(MOVE_SPEED * dt, distance);
         pos.x += (dx / distance) * step;
         pos.z += (dz / distance) * step;
-        character.group.rotation.y = Math.atan2(dx, dz);
-        character.setMoving(true);
+        character.face(dx, dz, dt);
+        character.setMoving(true, { running: tripRunning });
 
         if (!checkpointPassed && prevZ < env.checkpointZ && pos.z >= env.checkpointZ) {
           checkpointPassed = true;

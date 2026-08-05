@@ -4,20 +4,42 @@ import { addOutline, toonMaterial } from "./toon";
 
 export interface Character {
   group: THREE.Group;
-  setMoving: (moving: boolean) => void;
+  setMoving: (moving: boolean, opts?: { running?: boolean }) => void;
+  face: (dx: number, dz: number, dt: number) => void;
   update: (dt: number) => void;
 }
 
 const TARGET_HEIGHT = 1.7; // world units — roughly matches the village's human scale
-const MODEL_URL = "/models/Untitled.glb";
 
-// Many exported walk cycles bake forward translation into the root/hip bone ("root motion").
+// Meshy exports this character as one file per animation, all sharing the same rig
+// ("...with_a__biped_Animation_<name>_withSkin.glb"). We display the Idle mesh and pull the
+// rest of the clips out of their own files, then bind everything to one AnimationMixer.
+const MODEL_DIR = "/models/Meshy_AI_Young_Barista_with_a__biped_Animation_";
+const CLIP_FILES: Record<string, string> = {
+  idle: `${MODEL_DIR}Idle_15_withSkin.glb`,
+  walk: `${MODEL_DIR}Walking_withSkin.glb`,
+  run: `${MODEL_DIR}Running_withSkin.glb`,
+  turnLeft: `${MODEL_DIR}Walk_Turn_Left_withSkin.glb`,
+  mirror: `${MODEL_DIR}Mirror_Viewing_withSkin.glb`,
+  sitTransition: `${MODEL_DIR}Step_to_Sit_Transition_withSkin.glb`,
+};
+
+const TURN_THRESHOLD = 2.0; // radians — only play the turn-left clip for a sharp reversal
+const TURN_LERP_SPEED = 9;
+const IDLE_VARIATION_MIN = 6;
+const IDLE_VARIATION_MAX = 12;
+
+// Many exported walk/run cycles bake forward translation into the root/hip bone ("root motion").
 // We drive world position ourselves via click-to-move, so keep only the rotation tracks (the
 // actual limb articulation) — otherwise the two translations stack and the clip's loop point
 // visibly snaps the model back to its start-of-clip offset every cycle.
 function stripRootMotion(clip: THREE.AnimationClip): THREE.AnimationClip {
   const tracks = clip.tracks.filter((track) => !track.name.endsWith(".position"));
   return new THREE.AnimationClip(clip.name, clip.duration, tracks);
+}
+
+function shortestAngleDiff(from: number, to: number): number {
+  return Math.atan2(Math.sin(to - from), Math.cos(to - from));
 }
 
 function mesh(geometry: THREE.BufferGeometry, color: THREE.ColorRepresentation) {
@@ -94,15 +116,26 @@ export function createCharacter(): Character {
   const fallback = buildPrimitiveFallback();
   group.add(fallback);
 
-  let bodyForBob = fallback; // whichever visual root we bob up/down while walking
+  let bodyForBob = fallback; // whichever visual root we bob up/down while walking (fallback only)
   const legs: THREE.Object3D[] = [fallback.children[0], fallback.children[1]]; // leftLeg, rightLeg
 
   let mixer: THREE.AnimationMixer | null = null;
-  let walkAction: THREE.AnimationAction | null = null;
+  const actions: Partial<Record<keyof typeof CLIP_FILES, THREE.AnimationAction>> = {};
+  let currentAction: THREE.AnimationAction | null = null;
+  let modelReady = false;
+
+  function play(name: keyof typeof CLIP_FILES, fade = 0.25) {
+    const next = actions[name];
+    if (!next || next === currentAction) return;
+    next.reset().setEffectiveWeight(1).fadeIn(fade).play();
+    currentAction?.fadeOut(fade);
+    currentAction = next;
+  }
 
   const loader = new GLTFLoader();
+
   loader.load(
-    MODEL_URL,
+    CLIP_FILES.idle,
     (gltf) => {
       const model = gltf.scene;
 
@@ -127,46 +160,112 @@ export function createCharacter(): Character {
         addOutline(meshObj);
       }
 
-      if (gltf.animations.length > 0) {
-        mixer = new THREE.AnimationMixer(model);
-        const rawClip =
-          gltf.animations.find((clip) => /walk/i.test(clip.name)) ?? gltf.animations[0];
-        walkAction = mixer.clipAction(stripRootMotion(rawClip));
-        walkAction.play();
-        walkAction.paused = true;
-      }
-
       fallback.visible = false;
       group.add(model);
       bodyForBob = model;
+      modelReady = true;
+
+      mixer = new THREE.AnimationMixer(model);
+      if (gltf.animations[0]) {
+        actions.idle = mixer.clipAction(stripRootMotion(gltf.animations[0]));
+        play("idle", 0);
+      }
+
+      // Pull the remaining clips from their own files and bind them to the same mixer/skeleton
+      // (all six files share the same rig, so retargeting is just a name-matched bind).
+      const remaining = (Object.keys(CLIP_FILES) as (keyof typeof CLIP_FILES)[]).filter(
+        (name) => name !== "idle"
+      );
+      for (const name of remaining) {
+        loader.load(
+          CLIP_FILES[name],
+          (clipGltf) => {
+            const clip = clipGltf.animations[0];
+            if (!clip || !mixer) return;
+            const action = mixer.clipAction(stripRootMotion(clip));
+            action.clampWhenFinished = name === "turnLeft";
+            action.loop = name === "turnLeft" ? THREE.LoopOnce : THREE.LoopRepeat;
+            actions[name] = action;
+          },
+          undefined,
+          (err) => console.error("[character] failed to load clip", name, err)
+        );
+      }
     },
     undefined,
-    (err) => console.error("[character] failed to load", MODEL_URL, err)
+    (err) => console.error("[character] failed to load", CLIP_FILES.idle, err)
   );
 
   let moving = false;
+  let running = false;
   let t = 0;
+  let heading = 0; // current facing, radians
+  let turnTimer = 0; // >0 while the turn-left clip is playing out
+  let idleVariationTimer = IDLE_VARIATION_MIN + Math.random() * (IDLE_VARIATION_MAX - IDLE_VARIATION_MIN);
 
   return {
     group,
-    setMoving(value: boolean) {
+    setMoving(value, opts) {
+      const wasMoving = moving;
+      moving = value;
+      running = value ? Boolean(opts?.running) : false;
+
       if (!value) {
         t = 0;
         legs[0].rotation.x = 0;
         legs[1].rotation.x = 0;
         group.position.y = 0;
-        if (walkAction) walkAction.paused = true;
+        if (modelReady) play("idle");
+        idleVariationTimer = IDLE_VARIATION_MIN + Math.random() * (IDLE_VARIATION_MAX - IDLE_VARIATION_MIN);
+        return;
       }
-      moving = value;
+
+      if (!wasMoving && modelReady) {
+        const diff = Math.abs(shortestAngleDiff(heading, group.rotation.y));
+        if (diff > TURN_THRESHOLD && actions.turnLeft) {
+          turnTimer = actions.turnLeft.getClip().duration;
+          play("turnLeft", 0.15);
+        } else {
+          play(running && actions.run ? "run" : "walk");
+        }
+      }
     },
-    update(dt: number) {
+    face(dx, dz, dt) {
+      const target = Math.atan2(dx, dz);
+      if (!modelReady) {
+        group.rotation.y = target;
+        heading = target;
+        return;
+      }
+      const diff = shortestAngleDiff(group.rotation.y, target);
+      const lerpT = 1 - Math.exp(-TURN_LERP_SPEED * dt);
+      group.rotation.y += diff * lerpT;
+      heading = target;
+    },
+    update(dt) {
+      if (mixer) {
+        // Idle personality: after a while standing still, glance in the mirror and settle back.
+        if (!moving && currentAction === actions.idle) {
+          idleVariationTimer -= dt;
+          if (idleVariationTimer <= 0 && actions.mirror) {
+            play("mirror", 0.4);
+            idleVariationTimer = actions.mirror.getClip().duration + 1;
+          } else if (currentAction === actions.mirror && !actions.mirror?.isRunning()) {
+            play("idle", 0.4);
+          }
+        }
+
+        if (moving && turnTimer > 0) {
+          turnTimer -= dt;
+          if (turnTimer <= 0) play(running && actions.run ? "run" : "walk");
+        }
+
+        mixer.update(dt);
+      }
+
       if (!moving) return;
 
-      if (mixer && walkAction) {
-        walkAction.paused = false;
-        mixer.update(dt);
-        return; // the clip drives its own motion — skip the manual bob/leg-swing below
-      }
+      if (mixer && modelReady) return; // clip drives the walk/run cycle — skip the manual bob below
 
       t += dt * 8;
       if (bodyForBob === fallback) {
