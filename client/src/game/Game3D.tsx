@@ -82,6 +82,14 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
     <div className="game-panel">
       <div className="game-canvas" ref={containerRef} />
 
+      <button
+        className="home-button"
+        title="마을 중심으로 돌아가기"
+        onClick={() => sceneHandleRef.current?.goHome()}
+      >
+        🏠
+      </button>
+
       {stage === "locked" && (
         <MessengerBox
           speaker="누누"
