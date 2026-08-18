@@ -379,6 +379,32 @@ function buildVillageSign(scene: THREE.Scene) {
 const MART_MODEL_URL = "/models/convini.glb";
 const MART_FOOTPRINT = 13.6; // 게임 스케일에서 편의점이 차지할 가로 폭
 
+// 텍스처 이미지를 캔버스에 CSS filter로 한 번 구워 밝기/채도를 일괄로 올린 새
+// 텍스처를 만든다. material.color를 곱하는 방식과 달리 텍스처 자체를 보정하므로
+// 채도까지 실제로 바뀐다. flipY 등 샘플링 관련 설정은 원본 텍스처에서 그대로
+// 복사해 UV가 틀어지지 않게 한다.
+function boostTexture(source: THREE.Texture, filter: string): THREE.Texture {
+  const image = source.image as CanvasImageSource & { width: number; height: number };
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.filter = filter;
+  ctx.drawImage(image, 0, 0);
+
+  const boosted = new THREE.CanvasTexture(canvas);
+  boosted.colorSpace = source.colorSpace;
+  boosted.wrapS = source.wrapS;
+  boosted.wrapT = source.wrapT;
+  boosted.flipY = source.flipY;
+  boosted.repeat.copy(source.repeat);
+  boosted.offset.copy(source.offset);
+  boosted.center.copy(source.center);
+  boosted.rotation = source.rotation;
+  boosted.needsUpdate = true;
+  return boosted;
+}
+
 function buildMart(scene: THREE.Scene) {
   const mart = new THREE.Group();
   // 남동쪽 출구 도로(카메라가 보이는 남쪽) 방향으로 입구가 보이도록
@@ -405,17 +431,21 @@ function buildMart(scene: THREE.Scene) {
     model.position.z -= center.z;
     model.position.y -= scaledBox.min.y;
 
-    // convini.glb의 머티리얼은 metalness 팩터가 기본값(1, 완전 금속)으로 들어 있는데
+    // convini.glb 머티리얼은 metalness 팩터가 기본값(1, 완전 금속)으로 들어 있는데
     // 씬에 환경맵(반사용 IBL)이 없어서 직사광 하이라이트를 뺀 나머지가 거의 검게
-    // 렌더링된다 (텍스처 자체는 정상 로드됨 — 순수 라이팅/머티리얼 문제). 이 씬은
-    // 반사가 필요 없는 카툰풍이므로 metalness를 꺼서 베이스컬러 텍스처가 직접
-    // 보이는 매트한 렌더로 바꾼다.
+    // 렌더링된다. 이 모델은 (구버전과 달리) 전면·측면·후면 모두 텍스처가 고르게
+    // 채워져 있어 그대로 써도 되므로, metalness만 꺼서 베이스컬러 텍스처가 직접
+    // 보이는 매트한 렌더로 바꾼다. 실사 톤 텍스처는 주변 카툰 건물들의 채도 높은
+    // 플랫 컬러보다 칙칙하게 읽혀서, 베이스컬러 텍스처 자체를 캔버스로 한 번
+    // 구워 밝기+채도를 올린다 (color factor를 곱하는 방식은 밝기만 조절될 뿐
+    // 채도는 그대로라 회색조 벽면은 계속 칙칙해 보인다).
     model.traverse((obj) => {
       const meshObj = obj as THREE.Mesh;
       if (!meshObj.isMesh) return;
       const material = meshObj.material as THREE.MeshStandardMaterial;
       if (material?.isMeshStandardMaterial) {
         material.metalness = 0;
+        if (material.map) material.map = boostTexture(material.map, "saturate(170%) brightness(132%)");
       }
     });
 
