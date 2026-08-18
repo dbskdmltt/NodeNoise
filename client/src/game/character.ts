@@ -158,6 +158,17 @@ export function createCharacter(): Character {
         meshObj.castShadow = false;
         meshObj.receiveShadow = false;
         addOutline(meshObj);
+
+        // Meshy 익스포트는 MeshPhysicalMaterial에 metalness 1 + specularIntensity 1이
+        // 기본값으로 들어 있어서, 환경맵 없는 이 씬에서는 애매하게 반짝이는 하이라이트만
+        // 생기고 나머지는 어둡게 죽는다. 카툰풍 씬에는 광택이 필요 없으므로 전부 꺼서
+        // 매트한 텍스처 그대로 보이게 한다.
+        const material = meshObj.material as THREE.MeshPhysicalMaterial;
+        if (material?.isMeshStandardMaterial) {
+          material.metalness = 0;
+          material.roughness = 1;
+          if ("specularIntensity" in material) material.specularIntensity = 0;
+        }
       }
 
       fallback.visible = false;
