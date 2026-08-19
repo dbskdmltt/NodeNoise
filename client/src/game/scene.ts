@@ -32,6 +32,11 @@ const MAX_PITCH = 1.45; // 거의 정수리 뷰(짐벌 플립 직전)까지만 �
 const ORBIT_SENSITIVITY = 0.006; // 드래그 1px당 회전 라디안
 const DRAG_THRESHOLD = 6; // 이 픽셀 이상 움직여야 "클릭"이 아닌 "드래그"로 판정
 
+// 줌: BASE_RADIUS에 곱하는 배율. 웹은 마우스 휠, 모바일은 두 손가락 핀치로 조절한다.
+const MIN_ZOOM = 0.4; // 캐릭터 바로 뒤까지 당겨 붙는 한계
+const MAX_ZOOM = 2.5; // 마을이 넓게 보이는 한계
+const WHEEL_ZOOM_SENSITIVITY = 0.0015; // 휠 deltaY 1당 배율 변화
+
 // On load, pull the camera up and back for a wide establishing shot of the whole
 // village before settling into the normal over-the-shoulder follow camera.
 const INTRO_DURATION = 6; // seconds
@@ -72,12 +77,14 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
 
   let orbitYaw = 0;
   let orbitPitch = 0;
+  let zoom = 1;
 
   function getFollowOffset(): THREE.Vector3 {
     const yaw = BASE_YAW + orbitYaw;
     const pitch = Math.min(MAX_PITCH, Math.max(MIN_PITCH, BASE_PITCH + orbitPitch));
-    const horizontal = BASE_RADIUS * Math.cos(pitch);
-    return new THREE.Vector3(horizontal * Math.sin(yaw), BASE_RADIUS * Math.sin(pitch), horizontal * Math.cos(yaw));
+    const radius = BASE_RADIUS * zoom;
+    const horizontal = radius * Math.cos(pitch);
+    return new THREE.Vector3(horizontal * Math.sin(yaw), radius * Math.sin(pitch), horizontal * Math.cos(yaw));
   }
 
   function clampToWalkBounds(point: THREE.Vector3) {
@@ -112,29 +119,70 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
     }
   }
 
-  // 왼쪽 버튼을 누른 채 드래그하면 카메라 궤도 회전, 드래그 없이 그냥 클릭하면
-  // 기존처럼 그 지점으로 이동한다 — 둘 다 pointerdown/up 만으로는 구분이 안 되므로
-  // 이동 거리 임계값(DRAG_THRESHOLD)으로 판정한다.
+  // 왼쪽 버튼(또는 손가락 하나)을 누른 채 드래그하면 카메라 궤도 회전, 드래그
+  // 없이 그냥 클릭/탭하면 기존처럼 그 지점으로 이동한다 — pointerdown/up만으로는
+  // 구분이 안 되므로 이동 거리 임계값(DRAG_THRESHOLD)으로 판정한다. 손가락이
+  // 두 개가 되면(핀치) 궤도 회전은 멈추고 두 점 사이 거리 변화로 줌을 조절한다.
   let isPointerDown = false;
   let didDrag = false;
   let pointerDownPos = { x: 0, y: 0 };
   let lastPointerPos = { x: 0, y: 0 };
 
+  const activeTouches = new Map<number, { x: number; y: number }>();
+  let pinching = false;
+  let lastPinchDist = 0;
+
+  function applyZoom(factor: number) {
+    zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor));
+  }
+
+  function pinchDistance(): number {
+    const pts = Array.from(activeTouches.values());
+    return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+  }
+
   function handlePointerDown(event: PointerEvent) {
-    if (introActive || event.button !== 0) return;
-    isPointerDown = true;
-    didDrag = false;
-    pointerDownPos = { x: event.clientX, y: event.clientY };
-    lastPointerPos = { ...pointerDownPos };
+    if (introActive) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
     try {
       renderer.domElement.setPointerCapture(event.pointerId);
     } catch {
       // 일부 포인터 디바이스/타이밍에서 캡처가 거부될 수 있음 — 드래그 판정 자체는
       // pointermove 리스너로 계속 동작하므로 무시해도 안전하다.
     }
+
+    if (event.pointerType === "touch") {
+      activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (activeTouches.size === 2) {
+        // 두 번째 손가락이 닿는 순간 진행 중이던 한 손가락 드래그/클릭은 취소한다.
+        isPointerDown = false;
+        didDrag = true;
+        pinching = true;
+        lastPinchDist = pinchDistance();
+        return;
+      }
+      if (activeTouches.size > 2) return;
+    }
+
+    isPointerDown = true;
+    didDrag = false;
+    pointerDownPos = { x: event.clientX, y: event.clientY };
+    lastPointerPos = { ...pointerDownPos };
   }
 
   function handlePointerMove(event: PointerEvent) {
+    if (event.pointerType === "touch" && activeTouches.has(event.pointerId)) {
+      activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+
+    if (pinching && activeTouches.size === 2) {
+      const dist = pinchDistance();
+      if (lastPinchDist > 0) applyZoom(lastPinchDist / dist);
+      lastPinchDist = dist;
+      return;
+    }
+
     if (!isPointerDown) return;
     const dx = event.clientX - lastPointerPos.x;
     const dy = event.clientY - lastPointerPos.y;
@@ -152,20 +200,35 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
   }
 
   function handlePointerUp(event: PointerEvent) {
-    if (!isPointerDown) return;
-    isPointerDown = false;
     try {
       renderer.domElement.releasePointerCapture(event.pointerId);
     } catch {
       // setPointerCapture와 대칭: 캡처가 없었다면 해제도 조용히 무시한다.
     }
+
+    if (event.pointerType === "touch") {
+      activeTouches.delete(event.pointerId);
+      if (activeTouches.size < 2) pinching = false;
+      if (activeTouches.size > 0) return; // 아직 다른 손가락이 남아있으면 클릭 판정 보류
+    }
+
+    if (!isPointerDown) return;
+    isPointerDown = false;
     if (didDrag) return;
     moveToScreenPoint(event.clientX, event.clientY);
+  }
+
+  function handleWheel(event: WheelEvent) {
+    if (introActive) return;
+    event.preventDefault();
+    applyZoom(1 + event.deltaY * WHEEL_ZOOM_SENSITIVITY);
   }
 
   renderer.domElement.addEventListener("pointerdown", handlePointerDown);
   renderer.domElement.addEventListener("pointermove", handlePointerMove);
   renderer.domElement.addEventListener("pointerup", handlePointerUp);
+  renderer.domElement.addEventListener("pointercancel", handlePointerUp);
+  renderer.domElement.addEventListener("wheel", handleWheel, { passive: false });
 
   function resize() {
     const width = container.clientWidth || 1;
@@ -251,6 +314,8 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
       renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
       renderer.domElement.removeEventListener("pointermove", handlePointerMove);
       renderer.domElement.removeEventListener("pointerup", handlePointerUp);
+      renderer.domElement.removeEventListener("pointercancel", handlePointerUp);
+      renderer.domElement.removeEventListener("wheel", handleWheel);
       outlinePipeline.dispose();
       renderer.dispose();
       container.removeChild(renderer.domElement);
