@@ -49,7 +49,10 @@ const RIVER_CTRL: [number, number][] = [
   [21, -46], [24, -38], [22, -30], [25, -22], [23, -14], [26, -6], [24, 2], [26, 10],
 ];
 
-const CHURCH_POS = new THREE.Vector2(-16, -32.5);
+// 교회를 편의점과 같은 크기(MART_FOOTPRINT)로 키우면서 원래 위치(-16,-32.5)가
+// 해마루길 중심선 바로 위였던 자리라 도로를 통째로 덮어버리게 됐다. 도로 접선에
+// 수직인 방향으로 10유닛 밀어내 도로·마을 순환로 양쪽 모두와 겹치지 않게 했다.
+const CHURCH_POS = new THREE.Vector2(-22.4, -24.8);
 const BUS_STOP_POS = new THREE.Vector2(-4.6, -20.5);
 const VILLAGE_SIGN_POS = new THREE.Vector2(2.4, -15.8);
 const MART_POS = new THREE.Vector2(13, -2);
@@ -274,47 +277,53 @@ function buildVillage(
   placeLoopHouses(scene, inner, INNER_LOOP, Math.PI / 2, blocked, keepOut);
 }
 
+const CHURCH_MODEL_URL = "/models/Meshy_AI_Hilltop_Korean_Church_0819035724_texture.glb";
+const CHURCH_FOOTPRINT = 13.6; // 편의점(MART_FOOTPRINT)과 동일한 크기로 맞춤
+
 function buildChurch(scene: THREE.Scene) {
   const church = new THREE.Group();
-
-  const body = mesh(new THREE.BoxGeometry(2.4, 1.9, 3.2), "#f4efe2");
-  body.position.set(0, 0.95, 0);
-  church.add(body);
-
-  const roof = mesh(new THREE.ConeGeometry(2.1, 1.2, 4), "#8a4a5a");
-  roof.rotation.y = Math.PI / 4;
-  roof.scale.z = 1.15;
-  roof.position.set(0, 2.5, 0);
-  church.add(roof);
-
-  const door = mesh(new THREE.BoxGeometry(0.7, 1.1, 0.06), "#6b4a30");
-  door.position.set(0, 0.56, 1.65);
-  church.add(door);
-
-  const tower = mesh(new THREE.BoxGeometry(0.85, 2.9, 0.85), "#f4efe2");
-  tower.position.set(1.05, 1.45, 1.15);
-  church.add(tower);
-
-  const spire = mesh(new THREE.ConeGeometry(0.65, 0.8, 4), "#8a4a5a");
-  spire.rotation.y = Math.PI / 4;
-  spire.position.set(1.05, 3.3, 1.15);
-  church.add(spire);
-
-  const crossV = mesh(new THREE.BoxGeometry(0.07, 0.55, 0.07), "#ffffff");
-  crossV.position.set(1.05, 4.0, 1.15);
-  church.add(crossV);
-  const crossH = mesh(new THREE.BoxGeometry(0.34, 0.07, 0.07), "#ffffff");
-  crossH.position.set(1.05, 4.08, 1.15);
-  church.add(crossH);
-
-  const sign = makeTextBoard("해마루 광성교회", "#f4efe2", "#5a4a3a", 1.7, 0.4);
-  sign.position.set(-0.2, 1.55, 1.62);
-  church.add(sign);
-
   // 해마루길 북서쪽 초입을 바라보도록
   church.rotation.y = Math.atan2(CHURCH_POS.x - -13, CHURCH_POS.y - -30) + Math.PI;
   church.position.set(CHURCH_POS.x, 0, CHURCH_POS.y);
   scene.add(church);
+
+  // 실측 사진 스캔이라 "언덕 위 교회"라는 이름대로 잔디 덮인 낮은 돌 축대까지
+  // 통째로 담겨 있다 — 잘라내지 않고 그대로 살려서 작은 언덕처럼 보이게 둔다.
+  new GLTFLoader().load(CHURCH_MODEL_URL, (gltf) => {
+    const model = gltf.scene;
+
+    const box = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const horizontal = Math.max(size.x, size.z);
+    const scale = horizontal > 0 ? CHURCH_FOOTPRINT / horizontal : 1;
+    model.scale.setScalar(scale);
+
+    const scaledBox = new THREE.Box3().setFromObject(model);
+    const center = new THREE.Vector3();
+    scaledBox.getCenter(center);
+    model.position.x -= center.x;
+    model.position.z -= center.z;
+    model.position.y -= scaledBox.min.y;
+
+    // 편의점과 같은 이유로 metalness를 끄고, 실사 텍스처가 주변 카툰 건물보다
+    // 칙칙해 보이지 않도록 밝기+채도를 올린다 (mart와 동일한 처리).
+    model.traverse((obj) => {
+      const meshObj = obj as THREE.Mesh;
+      if (!meshObj.isMesh) return;
+      const material = meshObj.material as THREE.MeshStandardMaterial;
+      if (material?.isMeshStandardMaterial) {
+        material.metalness = 0;
+        if (material.map) material.map = boostTexture(material.map, "saturate(170%) brightness(132%)");
+      }
+    });
+
+    church.add(model);
+  });
+
+  const sign = makeTextBoard("해마루 광성교회", "#f4efe2", "#5a4a3a", 2.6, 0.6);
+  sign.position.set(0, 2.2, CHURCH_FOOTPRINT / 2 + 0.5);
+  church.add(sign);
 }
 
 function buildBusStop(scene: THREE.Scene) {
@@ -405,25 +414,23 @@ function boostTexture(source: THREE.Texture, filter: string): THREE.Texture {
   return boosted;
 }
 
-function buildMart(scene: THREE.Scene) {
-  const mart = new THREE.Group();
-  // 남동쪽 출구 도로(카메라가 보이는 남쪽) 방향으로 입구가 보이도록
-  mart.rotation.y = Math.atan2(7 - MART_POS.x, -6 - MART_POS.y);
-  mart.position.set(MART_POS.x, 0, MART_POS.y);
-  scene.add(mart);
-
-  new GLTFLoader().load(MART_MODEL_URL, (gltf) => {
+// 실측 사진 스캔 GLB 공용 로더. 세 가지를 항상 같이 해줘야 한다: (1) 익스포트
+// 스케일을 모르므로 바운딩박스로 footprint에 맞춰 정규화, (2) 바닥을 y=0에 앉히고
+// 수평 중심을 부모 그룹 원점에 맞춤, (3) metalness 팩터가 기본값(1, 완전 금속)으로
+// 들어 있어 환경맵 없는 씬에서 거의 검게 렌더링되는 것을 보정 — 베이스컬러 텍스처
+// 자체를 캔버스로 한 번 구워 밝기+채도까지 올려서, 주변 카툰 건물들의 채도 높은
+// 플랫 컬러 옆에서도 칙칙해 보이지 않게 한다.
+function loadScannedModel(parent: THREE.Object3D, url: string, footprint: number) {
+  new GLTFLoader().load(url, (gltf) => {
     const model = gltf.scene;
 
-    // 실제 익스포트 스케일을 모르므로 바운딩박스로 정규화 (character.ts와 동일 방식)
     const box = new THREE.Box3().setFromObject(model);
     const size = new THREE.Vector3();
     box.getSize(size);
     const horizontal = Math.max(size.x, size.z);
-    const scale = horizontal > 0 ? MART_FOOTPRINT / horizontal : 1;
+    const scale = horizontal > 0 ? footprint / horizontal : 1;
     model.scale.setScalar(scale);
 
-    // 스케일 반영 후 바닥을 y=0에 앉히고 수평 중심을 그룹 원점에 맞춘다
     const scaledBox = new THREE.Box3().setFromObject(model);
     const center = new THREE.Vector3();
     scaledBox.getCenter(center);
@@ -431,14 +438,6 @@ function buildMart(scene: THREE.Scene) {
     model.position.z -= center.z;
     model.position.y -= scaledBox.min.y;
 
-    // convini.glb 머티리얼은 metalness 팩터가 기본값(1, 완전 금속)으로 들어 있는데
-    // 씬에 환경맵(반사용 IBL)이 없어서 직사광 하이라이트를 뺀 나머지가 거의 검게
-    // 렌더링된다. 이 모델은 (구버전과 달리) 전면·측면·후면 모두 텍스처가 고르게
-    // 채워져 있어 그대로 써도 되므로, metalness만 꺼서 베이스컬러 텍스처가 직접
-    // 보이는 매트한 렌더로 바꾼다. 실사 톤 텍스처는 주변 카툰 건물들의 채도 높은
-    // 플랫 컬러보다 칙칙하게 읽혀서, 베이스컬러 텍스처 자체를 캔버스로 한 번
-    // 구워 밝기+채도를 올린다 (color factor를 곱하는 방식은 밝기만 조절될 뿐
-    // 채도는 그대로라 회색조 벽면은 계속 칙칙해 보인다).
     model.traverse((obj) => {
       const meshObj = obj as THREE.Mesh;
       if (!meshObj.isMesh) return;
@@ -449,8 +448,33 @@ function buildMart(scene: THREE.Scene) {
       }
     });
 
-    mart.add(model);
+    parent.add(model);
   });
+}
+
+function buildMart(scene: THREE.Scene) {
+  const mart = new THREE.Group();
+  // 남동쪽 출구 도로(카메라가 보이는 남쪽) 방향으로 입구가 보이도록
+  mart.rotation.y = Math.atan2(7 - MART_POS.x, -6 - MART_POS.y);
+  mart.position.set(MART_POS.x, 0, MART_POS.y);
+  scene.add(mart);
+  loadScannedModel(mart, MART_MODEL_URL, MART_FOOTPRINT);
+}
+
+const CONTAINER_MODEL_URL = "/models/Meshy_AI_Industrial_Mural_Faca_0819041231_texture.glb";
+const CONTAINER_FOOTPRINT = 4; // 편의점 옆 소품 크기 — 건물들보다 훨씬 작게
+// 편의점 그룹 로컬 +X쪽(옆면)에, 같은 방향을 보도록 편의점과 같은 회전을 적용한다.
+const CONTAINER_LOCAL_OFFSET = new THREE.Vector2(9.4, -1.5);
+
+function buildContainer(scene: THREE.Scene) {
+  const martRotationY = Math.atan2(7 - MART_POS.x, -6 - MART_POS.y);
+  const worldOffset = CONTAINER_LOCAL_OFFSET.clone().rotateAround(new THREE.Vector2(0, 0), -martRotationY);
+
+  const container = new THREE.Group();
+  container.rotation.y = martRotationY;
+  container.position.set(MART_POS.x + worldOffset.x, 0, MART_POS.y + worldOffset.y);
+  scene.add(container);
+  loadScannedModel(container, CONTAINER_MODEL_URL, CONTAINER_FOOTPRINT);
 }
 
 function buildRiver(scene: THREE.Scene, riverPts: THREE.Vector2[]) {
@@ -489,7 +513,7 @@ function buildTrees(scene: THREE.Scene, blocked: THREE.Vector2[][], accessPts: T
     );
     if (p.x > 18.5) continue;
     if (blocked.some((line) => distToPolyline(p, line) < 2.2)) continue;
-    if (p.distanceTo(CHURCH_POS) < 3.2) continue;
+    if (p.distanceTo(CHURCH_POS) < CHURCH_FOOTPRINT / 2 + 2) continue;
     buildTree(scene, p.x, p.y, 0.9 + ((i * 37) % 10) / 30);
   }
 
@@ -587,7 +611,7 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
 
   const houseBlocked = [mainStreetPts, accessPts, riverPts];
   const keepOut = [
-    { pos: CHURCH_POS, radius: 3.4 },
+    { pos: CHURCH_POS, radius: CHURCH_FOOTPRINT / 2 + 1.5 },
     { pos: BUS_STOP_POS, radius: 3.4 },
     { pos: VILLAGE_SIGN_POS, radius: 3.4 },
     { pos: MART_POS, radius: MART_FOOTPRINT / 2 + 1.5 },
@@ -598,6 +622,7 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
   buildBusStop(scene);
   buildVillageSign(scene);
   buildMart(scene);
+  buildContainer(scene);
 
   buildTrees(scene, [mainStreetPts, accessPts, outerLoopPts, innerLoopPts, riverPts], accessPts);
   buildCheckpoint(scene);
