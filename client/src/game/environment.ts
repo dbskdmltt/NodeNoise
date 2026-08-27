@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { toonMaterial } from "./toon";
+import { toonMaterial, recolorTexture } from "./toon";
 import { VILLAGE_HOUSES, type HousePlacement } from "../data/villageLayout";
 
 export interface WalkBounds {
@@ -358,32 +358,6 @@ function buildVillageSign(scene: THREE.Scene) {
 const MART_MODEL_URL = "/models/convini.glb";
 const MART_FOOTPRINT = 13.6; // 게임 스케일에서 편의점이 차지할 가로 폭
 
-// 텍스처 이미지를 캔버스에 CSS filter로 한 번 구워 밝기/채도를 일괄로 올린 새
-// 텍스처를 만든다. material.color를 곱하는 방식과 달리 텍스처 자체를 보정하므로
-// 채도까지 실제로 바뀐다. flipY 등 샘플링 관련 설정은 원본 텍스처에서 그대로
-// 복사해 UV가 틀어지지 않게 한다.
-function boostTexture(source: THREE.Texture, filter: string): THREE.Texture {
-  const image = source.image as CanvasImageSource & { width: number; height: number };
-  const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const ctx = canvas.getContext("2d")!;
-  ctx.filter = filter;
-  ctx.drawImage(image, 0, 0);
-
-  const boosted = new THREE.CanvasTexture(canvas);
-  boosted.colorSpace = source.colorSpace;
-  boosted.wrapS = source.wrapS;
-  boosted.wrapT = source.wrapT;
-  boosted.flipY = source.flipY;
-  boosted.repeat.copy(source.repeat);
-  boosted.offset.copy(source.offset);
-  boosted.center.copy(source.center);
-  boosted.rotation = source.rotation;
-  boosted.needsUpdate = true;
-  return boosted;
-}
-
 // 실측 사진 스캔 GLB 공용 로더. 세 가지를 항상 같이 해줘야 한다: (1) 익스포트
 // 스케일을 모르므로 바운딩박스로 footprint에 맞춰 정규화, (2) 바닥을 y=0에 앉히고
 // 수평 중심을 부모 그룹 원점에 맞춤, (3) metalness 팩터가 기본값(1, 완전 금속)으로
@@ -414,7 +388,7 @@ function loadScannedModel(parent: THREE.Object3D, url: string, footprint: number
       const material = meshObj.material as THREE.MeshStandardMaterial;
       if (material?.isMeshStandardMaterial) {
         material.metalness = 0;
-        if (material.map) material.map = boostTexture(material.map, "saturate(128%) brightness(114%)");
+        if (material.map) material.map = recolorTexture(material.map, "saturate(128%) brightness(114%)");
       }
     });
 

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { addOutline, toonMaterial } from "./toon";
+import { addOutline, toonMaterial, recolorTexture } from "./toon";
 
 export interface Character {
   group: THREE.Group;
@@ -171,6 +171,11 @@ export function createCharacter(): Character {
           material.metalness = 0;
           material.roughness = 1;
           if ("specularIntensity" in material) material.specularIntensity = 0;
+
+          // 피부·옷·머리가 한 장의 텍스처에 같이 있어서 부위별로 따로 손볼 수는
+          // 없지만, 피부 쪽이 특히 채도 높은 주황으로 튀어서 전체를 살짝
+          // 덜어낸다 — 누누의 원래 갈색 톤은 유지하면서 과포화만 가라앉힌다.
+          if (material.map) material.map = recolorTexture(material.map, "saturate(62%) brightness(99%)");
         }
       }
 

@@ -42,3 +42,29 @@ export function addOutline(mesh: THREE.Mesh, scale = 1.04) {
   mesh.add(outline);
   return outline;
 }
+
+// 스캔/생성된 GLB 텍스처를 캔버스에 CSS filter로 한 번 구워 색을 보정한 새 텍스처를
+// 만든다. material.color를 곱하는 방식과 달리 텍스처 자체를 고치므로 채도/색조가
+// 실제로 바뀐다. flipY 등 샘플링 관련 설정은 원본 텍스처에서 그대로 복사해 UV가
+// 틀어지지 않게 한다.
+export function recolorTexture(source: THREE.Texture, filter: string): THREE.Texture {
+  const image = source.image as CanvasImageSource & { width: number; height: number };
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.filter = filter;
+  ctx.drawImage(image, 0, 0);
+
+  const recolored = new THREE.CanvasTexture(canvas);
+  recolored.colorSpace = source.colorSpace;
+  recolored.wrapS = source.wrapS;
+  recolored.wrapT = source.wrapT;
+  recolored.flipY = source.flipY;
+  recolored.repeat.copy(source.repeat);
+  recolored.offset.copy(source.offset);
+  recolored.center.copy(source.center);
+  recolored.rotation = source.rotation;
+  recolored.needsUpdate = true;
+  return recolored;
+}
