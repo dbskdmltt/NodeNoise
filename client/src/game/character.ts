@@ -114,6 +114,9 @@ export function createCharacter(): Character {
   const group = new THREE.Group();
 
   const fallback = buildPrimitiveFallback();
+  // 실제 GLTF가 로드되기 전까지 잠깐 뜨는 조악한 임시 캐릭터가 눈에 띄어서, 로드
+  // 실패시에만 보이는 진짜 "폴백"으로 바꾼다 — 로딩 중에는 그냥 안 보이는 게 낫다.
+  fallback.visible = false;
   group.add(fallback);
 
   let bodyForBob = fallback; // whichever visual root we bob up/down while walking (fallback only)

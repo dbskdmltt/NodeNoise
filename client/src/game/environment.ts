@@ -289,37 +289,7 @@ function buildChurch(scene: THREE.Scene) {
 
   // 실측 사진 스캔이라 "언덕 위 교회"라는 이름대로 잔디 덮인 낮은 돌 축대까지
   // 통째로 담겨 있다 — 잘라내지 않고 그대로 살려서 작은 언덕처럼 보이게 둔다.
-  new GLTFLoader().load(CHURCH_MODEL_URL, (gltf) => {
-    const model = gltf.scene;
-
-    const box = new THREE.Box3().setFromObject(model);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const horizontal = Math.max(size.x, size.z);
-    const scale = horizontal > 0 ? CHURCH_FOOTPRINT / horizontal : 1;
-    model.scale.setScalar(scale);
-
-    const scaledBox = new THREE.Box3().setFromObject(model);
-    const center = new THREE.Vector3();
-    scaledBox.getCenter(center);
-    model.position.x -= center.x;
-    model.position.z -= center.z;
-    model.position.y -= scaledBox.min.y;
-
-    // 편의점과 같은 이유로 metalness를 끄고, 실사 텍스처가 주변 카툰 건물보다
-    // 칙칙해 보이지 않도록 밝기+채도를 올린다 (mart와 동일한 처리).
-    model.traverse((obj) => {
-      const meshObj = obj as THREE.Mesh;
-      if (!meshObj.isMesh) return;
-      const material = meshObj.material as THREE.MeshStandardMaterial;
-      if (material?.isMeshStandardMaterial) {
-        material.metalness = 0;
-        if (material.map) material.map = boostTexture(material.map, "saturate(170%) brightness(132%)");
-      }
-    });
-
-    church.add(model);
-  });
+  loadScannedModel(church, CHURCH_MODEL_URL, CHURCH_FOOTPRINT);
 
   const sign = makeTextBoard("해마루 광성교회", "#f4efe2", "#5a4a3a", 2.6, 0.6);
   sign.position.set(0, 2.2, CHURCH_FOOTPRINT / 2 + 0.5);
@@ -444,7 +414,7 @@ function loadScannedModel(parent: THREE.Object3D, url: string, footprint: number
       const material = meshObj.material as THREE.MeshStandardMaterial;
       if (material?.isMeshStandardMaterial) {
         material.metalness = 0;
-        if (material.map) material.map = boostTexture(material.map, "saturate(170%) brightness(132%)");
+        if (material.map) material.map = boostTexture(material.map, "saturate(128%) brightness(114%)");
       }
     });
 
@@ -631,7 +601,9 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
   const hemi = new THREE.HemisphereLight("#ffffff", "#8fbf7a", 1.1);
   scene.add(hemi);
 
-  const sun = new THREE.DirectionalLight("#fff6e0", 1.8);
+  // 기존 "#fff6e0"(따뜻한 크림색) 햇빛이 씬의 거의 모든 표면(카툰 건물 포함)에
+  // 노란 색조를 얹고 있었다 — 중립에 가까운 백색으로 바꿔서 노란끼를 뺐다.
+  const sun = new THREE.DirectionalLight("#f5f7fb", 1.8);
   sun.position.set(6, 9, 5);
   scene.add(sun);
 
