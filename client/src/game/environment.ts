@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { toonMaterial, recolorTexture } from "./toon";
 import { VILLAGE_HOUSES, type HousePlacement } from "../data/villageLayout";
+import { PLANET_RADIUS, planetPosition, planetTransform } from "./planet";
 
 export interface WalkBounds {
   minX: number;
@@ -10,12 +11,18 @@ export interface WalkBounds {
   maxZ: number;
 }
 
+export interface Landmark {
+  name: string;
+  pos: THREE.Vector2;
+}
+
 export interface Environment {
   postbox: THREE.Object3D;
   walkBounds: WalkBounds;
   spawnPoint: THREE.Vector3;
   postboxStandPoint: THREE.Vector3;
   checkpointZ: number;
+  landmarks: Landmark[];
 }
 
 const ROOF_COLORS = ["#a8503a", "#7a5a8a", "#4a7a8a", "#8a7a4a", "#8a4a5a"];
@@ -119,34 +126,37 @@ function buildSkyDome(scene: THREE.Scene) {
   scene.add(sky);
 }
 
-// Builds one flat quad on the ground between two (x, z) points, `width` wide. Vertices
-// are placed directly rather than rotating a PlaneGeometry, since curve headings change
-// continuously and re-deriving an Euler rotation for every segment is more error-prone
-// than just placing the four corners. Winding order is chosen per quad so the face
-// always points up — segments run in every direction now (loops, S-curves), and the
-// single-sided toon material would cull half of them otherwise.
+// Builds one quad on the planet surface between two (x, z) *design* points, `width`
+// wide. Each corner is computed in flat design space (perpendicular offset from the
+// segment direction) then mapped onto the sphere individually via planetPosition — since
+// segments are already short (loop/curve sampling), each quad is a good flat
+// approximation of the curved strip it belongs to. Winding order is chosen per quad so
+// the face always points outward — segments run in every direction (loops, S-curves),
+// and the single-sided toon material would cull half of them otherwise.
 function groundQuad(p0: THREE.Vector2, p1: THREE.Vector2, width: number, color: THREE.ColorRepresentation, y = 0.011) {
   const dir = new THREE.Vector2(p1.x - p0.x, p1.y - p0.y).normalize();
   const perp = new THREE.Vector2(-dir.y, dir.x).multiplyScalar(width / 2);
 
-  const c = [
+  const corners2D = [
     [p0.x + perp.x, p0.y + perp.y],
     [p0.x - perp.x, p0.y - perp.y],
     [p1.x - perp.x, p1.y - perp.y],
     [p1.x + perp.x, p1.y + perp.y],
   ];
-  const e1x = c[1][0] - c[0][0];
-  const e1z = c[1][1] - c[0][1];
-  const e2x = c[2][0] - c[0][0];
-  const e2z = c[2][1] - c[0][1];
-  const upWinding = e1z * e2x - e1x * e2z > 0;
+  const c = corners2D.map(([cx, cz]) => planetPosition(cx, cz, y));
+
+  const center = planetPosition((p0.x + p1.x) / 2, (p0.y + p1.y) / 2, y);
+  const e1 = c[1].clone().sub(c[0]);
+  const e2 = c[2].clone().sub(c[0]);
+  const faceNormal = e1.clone().cross(e2);
+  const upWinding = faceNormal.dot(center) > 0; // 바깥(구 중심에서 멀어지는 쪽)을 향하는 쪽 선택
   const order = upWinding ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2];
 
   const positions = new Float32Array(order.length * 3);
   order.forEach((ci, i) => {
-    positions[i * 3] = c[ci][0];
-    positions[i * 3 + 1] = y;
-    positions[i * 3 + 2] = c[ci][1];
+    positions[i * 3] = c[ci].x;
+    positions[i * 3 + 1] = c[ci].y;
+    positions[i * 3 + 2] = c[ci].z;
   });
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -212,8 +222,9 @@ function buildHouse(
   door.position.set(0, 0.48, (footprint / 2) * 1.03);
   house.add(door);
 
-  house.rotation.y = rotationY;
-  house.position.set(x, 0, z);
+  const t = planetTransform(x, z, rotationY);
+  house.position.copy(t.position);
+  house.quaternion.copy(t.quaternion);
   scene.add(house);
 }
 
@@ -283,8 +294,10 @@ const CHURCH_FOOTPRINT = 13.6; // 편의점(MART_FOOTPRINT)과 동일한 크기�
 function buildChurch(scene: THREE.Scene) {
   const church = new THREE.Group();
   // 해마루길 북서쪽 초입을 바라보도록
-  church.rotation.y = Math.atan2(CHURCH_POS.x - -13, CHURCH_POS.y - -30) + Math.PI;
-  church.position.set(CHURCH_POS.x, 0, CHURCH_POS.y);
+  const churchHeading = Math.atan2(CHURCH_POS.x - -13, CHURCH_POS.y - -30) + Math.PI;
+  const churchT = planetTransform(CHURCH_POS.x, CHURCH_POS.y, churchHeading);
+  church.position.copy(churchT.position);
+  church.quaternion.copy(churchT.quaternion);
   scene.add(church);
 
   // 실측 사진 스캔이라 "언덕 위 교회"라는 이름대로 잔디 덮인 낮은 돌 축대까지
@@ -326,8 +339,10 @@ function buildBusStop(scene: THREE.Scene) {
   stop.add(signBoard);
 
   // 해마루길 쪽(동쪽)을 바라보도록
-  stop.rotation.y = Math.atan2(-3 - BUS_STOP_POS.x, -21 - BUS_STOP_POS.y);
-  stop.position.set(BUS_STOP_POS.x, 0, BUS_STOP_POS.y);
+  const stopHeading = Math.atan2(-3 - BUS_STOP_POS.x, -21 - BUS_STOP_POS.y);
+  const stopT = planetTransform(BUS_STOP_POS.x, BUS_STOP_POS.y, stopHeading);
+  stop.position.copy(stopT.position);
+  stop.quaternion.copy(stopT.quaternion);
   scene.add(stop);
 }
 
@@ -350,8 +365,10 @@ function buildVillageSign(scene: THREE.Scene) {
   sign.add(address);
 
   // 남쪽(팔로우 카메라가 항상 보는 방향)을 바라보도록 — 북향이면 글자가 거울상이 됨
-  sign.rotation.y = Math.atan2(0 - VILLAGE_SIGN_POS.x, -10 - VILLAGE_SIGN_POS.y);
-  sign.position.set(VILLAGE_SIGN_POS.x, 0, VILLAGE_SIGN_POS.y);
+  const signHeading = Math.atan2(0 - VILLAGE_SIGN_POS.x, -10 - VILLAGE_SIGN_POS.y);
+  const signT = planetTransform(VILLAGE_SIGN_POS.x, VILLAGE_SIGN_POS.y, signHeading);
+  sign.position.copy(signT.position);
+  sign.quaternion.copy(signT.quaternion);
   scene.add(sign);
 }
 
@@ -396,11 +413,14 @@ function loadScannedModel(parent: THREE.Object3D, url: string, footprint: number
   });
 }
 
+const MART_HEADING = Math.atan2(7 - MART_POS.x, -6 - MART_POS.y);
+
 function buildMart(scene: THREE.Scene) {
   const mart = new THREE.Group();
   // 남동쪽 출구 도로(카메라가 보이는 남쪽) 방향으로 입구가 보이도록
-  mart.rotation.y = Math.atan2(7 - MART_POS.x, -6 - MART_POS.y);
-  mart.position.set(MART_POS.x, 0, MART_POS.y);
+  const martT = planetTransform(MART_POS.x, MART_POS.y, MART_HEADING);
+  mart.position.copy(martT.position);
+  mart.quaternion.copy(martT.quaternion);
   scene.add(mart);
   loadScannedModel(mart, MART_MODEL_URL, MART_FOOTPRINT);
 }
@@ -411,12 +431,16 @@ const CONTAINER_FOOTPRINT = 4; // 편의점 옆 소품 크기 — 건물들보�
 const CONTAINER_LOCAL_OFFSET = new THREE.Vector2(9.4, -1.5);
 
 function buildContainer(scene: THREE.Scene) {
-  const martRotationY = Math.atan2(7 - MART_POS.x, -6 - MART_POS.y);
-  const worldOffset = CONTAINER_LOCAL_OFFSET.clone().rotateAround(new THREE.Vector2(0, 0), -martRotationY);
+  // 편의점 로컬 오프셋 계산 자체는 여전히 평면 설계좌표에서 한다 — 최종 위치를
+  // planetTransform에 넘기기 전까지는 편의점과 동일한 2D 로직 그대로.
+  const worldOffset = CONTAINER_LOCAL_OFFSET.clone().rotateAround(new THREE.Vector2(0, 0), -MART_HEADING);
+  const designX = MART_POS.x + worldOffset.x;
+  const designZ = MART_POS.y + worldOffset.y;
 
   const container = new THREE.Group();
-  container.rotation.y = martRotationY;
-  container.position.set(MART_POS.x + worldOffset.x, 0, MART_POS.y + worldOffset.y);
+  const t = planetTransform(designX, designZ, MART_HEADING);
+  container.position.copy(t.position);
+  container.quaternion.copy(t.quaternion);
   scene.add(container);
   loadScannedModel(container, CONTAINER_MODEL_URL, CONTAINER_FOOTPRINT);
 }
@@ -442,7 +466,9 @@ function buildTree(scene: THREE.Scene, x: number, z: number, scale = 1) {
   tree.add(foliageTop);
 
   tree.scale.setScalar(scale);
-  tree.position.set(x, 0, z);
+  const t = planetTransform(x, z, 0);
+  tree.position.copy(t.position);
+  tree.quaternion.copy(t.quaternion);
   scene.add(tree);
 }
 
@@ -498,8 +524,10 @@ function buildCheckpoint(scene: THREE.Scene) {
   checkpoint.add(boothRoof);
 
   // 차단봉이 진입로 진행 방향과 직각이 되도록 도로 접선에 맞춰 회전
-  checkpoint.rotation.y = Math.atan2(POSTBOX_POS.x - CHECKPOINT_POS.x, POSTBOX_POS.y - CHECKPOINT_POS.y);
-  checkpoint.position.set(CHECKPOINT_POS.x, 0, CHECKPOINT_POS.y);
+  const checkpointHeading = Math.atan2(POSTBOX_POS.x - CHECKPOINT_POS.x, POSTBOX_POS.y - CHECKPOINT_POS.y);
+  const checkpointT = planetTransform(CHECKPOINT_POS.x, CHECKPOINT_POS.y, checkpointHeading);
+  checkpoint.position.copy(checkpointT.position);
+  checkpoint.quaternion.copy(checkpointT.quaternion);
   scene.add(checkpoint);
 }
 
@@ -524,15 +552,15 @@ function buildPostbox(scene: THREE.Scene): THREE.Object3D {
   flag.position.set(0.22, 1.05, 0.15);
   postbox.add(flag);
 
-  postbox.position.set(POSTBOX_POS.x, 0, POSTBOX_POS.y);
+  const postboxT = planetTransform(POSTBOX_POS.x, POSTBOX_POS.y, 0);
+  postbox.position.copy(postboxT.position);
+  postbox.quaternion.copy(postboxT.quaternion);
   scene.add(postbox);
   return postbox;
 }
 
-function buildGround(scene: THREE.Scene) {
-  const ground = mesh(new THREE.PlaneGeometry(68, 96), "#8fbf7a");
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.set(2, 0, -3);
+function buildPlanetSurface(scene: THREE.Scene) {
+  const ground = mesh(new THREE.SphereGeometry(PLANET_RADIUS, 96, 64), "#8fbf7a");
   scene.add(ground);
 }
 
@@ -544,7 +572,7 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
   const riverPts = sampleCurve(RIVER_CTRL, 80);
 
   buildSkyDome(scene);
-  buildGround(scene);
+  buildPlanetSurface(scene);
 
   buildPath(scene, outerLoopPts, 1.4, "#c9b98f", 0.011);
   buildPath(scene, innerLoopPts, 1.4, "#c9b98f", 0.011);
@@ -584,11 +612,21 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
   const fill = new THREE.AmbientLight("#ffffff", 0.5);
   scene.add(fill);
 
+  const landmarks: Landmark[] = [
+    { name: "해마루촌", pos: VILLAGE_SIGN_POS },
+    { name: "해마루 광성교회", pos: CHURCH_POS },
+    { name: "이마트24", pos: MART_POS },
+    { name: "버스정류장", pos: BUS_STOP_POS },
+    { name: "검문소", pos: CHECKPOINT_POS },
+    { name: "우체통", pos: POSTBOX_POS },
+  ];
+
   return {
     postbox,
     walkBounds: { minX: -27, maxX: 30, minZ: -42, maxZ: 38.5 },
     spawnPoint: SPAWN_POINT.clone(),
     postboxStandPoint: new THREE.Vector3(26.8, 0, 35.8),
     checkpointZ: CHECKPOINT_Z,
+    landmarks,
   };
 }

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { buildEnvironment } from "./environment";
 import { createCharacter } from "./character";
 import { createOutlinePipeline } from "./outlinePipeline";
+import { PLANET_RADIUS, planetTransform, inversePlanetPosition, wrapX } from "./planet";
 
 export interface SceneCallbacks {
   onPostboxReached: () => void;
@@ -42,6 +43,9 @@ const WHEEL_ZOOM_SENSITIVITY = 0.0015; // 휠 deltaY 1당 배율 변화
 const INTRO_DURATION = 6; // seconds
 const INTRO_CAMERA_OFFSET = new THREE.Vector3(0, 27, -25);
 
+const UP_LOCAL = new THREE.Vector3(0, 1, 0);
+const SPHERE_CENTER = new THREE.Vector3(0, 0, 0);
+
 function easeInOutSmooth(t: number) {
   return t * t * (3 - 2 * t);
 }
@@ -56,16 +60,36 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
 
   const outlinePipeline = createOutlinePipeline(renderer);
 
+  // 미니맵: 렌더러 캔버스와 나란히 두는 별도 2D 캔버스. React 리렌더 없이 scene.ts가
+  // 다른 실시간 시각 요소처럼 직접 소유하고 매 틱 그린다.
+  const minimapCanvas = document.createElement("canvas");
+  minimapCanvas.className = "minimap-canvas";
+  minimapCanvas.width = 200;
+  minimapCanvas.height = 200;
+  container.appendChild(minimapCanvas);
+  const minimapCtx = minimapCanvas.getContext("2d")!;
+
   const env = buildEnvironment(scene);
   const character = createCharacter();
-  character.group.position.copy(env.spawnPoint);
-  scene.add(character.group);
+  // character.group은 걷는 방향으로 도는 자기 회전(rotation.y)만 계속 로컬로 관리하고,
+  // 구면 위 실제 위치·표면 정렬은 이 바깥 anchor가 매 틱 담당한다 — character.ts는
+  // 구체 전환과 무관하게 그대로 둔다.
+  const characterAnchor = new THREE.Group();
+  characterAnchor.add(character.group);
+  scene.add(characterAnchor);
 
   // 인트로 조망은 마을 순환로가 화면을 채우는 정도만: 순환로 중심(0, -23)보다 살짝
-  // 남쪽을 바라봐 진입로 초입이 함께 걸리게 한다.
-  const villageCenter = new THREE.Vector3(0, 0, -20);
-  camera.position.copy(villageCenter).add(INTRO_CAMERA_OFFSET);
-  camera.lookAt(villageCenter);
+  // 남쪽을 바라봐 진입로 초입이 함께 걸리게 한다. 구체로 바뀌면서 이 지점도 표면 위
+  // 좌표라, 인트로 카메라도 이 지점의 표면 쿼터니언(법선 방향)을 기준으로 놓는다.
+  const villageCenterDesign = { x: 0, z: -20 };
+  const villageCenterT = planetTransform(villageCenterDesign.x, villageCenterDesign.z, 0);
+  camera.position.copy(villageCenterT.position).add(INTRO_CAMERA_OFFSET.clone().applyQuaternion(villageCenterT.quaternion));
+  camera.up.copy(UP_LOCAL.clone().applyQuaternion(villageCenterT.quaternion));
+  camera.lookAt(villageCenterT.position);
+
+  // 이동/걷기 경계/체크포인트 판정은 전부 이 평면 설계좌표(x,z)에서 그대로 계산한다 —
+  // 화면에 그릴 때만 planetTransform으로 구면 위 위치에 투영한다.
+  const simPos = env.spawnPoint.clone();
 
   let moveTarget: THREE.Vector3 | null = null;
   let pendingPostboxInteract = false;
@@ -74,6 +98,7 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
   let tripRunning = false;
   let introElapsed = 0;
   let introActive = true;
+  let lastHeading = 0; // 미니맵 화살표용, character.face()와 같은 atan2(dx,dz)
 
   let orbitYaw = 0;
   let orbitPitch = 0;
@@ -87,15 +112,22 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
     return new THREE.Vector3(horizontal * Math.sin(yaw), radius * Math.sin(pitch), horizontal * Math.cos(yaw));
   }
 
-  function clampToWalkBounds(point: THREE.Vector3) {
-    point.x = Math.min(env.walkBounds.maxX, Math.max(env.walkBounds.minX, point.x));
+  function clampToWalkBounds(point: { x: number; z: number }) {
+    // 경도(x)는 행성을 한 바퀴 돌면 반대편으로 이어지도록 랩— 더 이상 가두지 않는다.
+    point.x = wrapX(point.x);
     point.z = Math.min(env.walkBounds.maxZ, Math.max(env.walkBounds.minZ, point.z));
     return point;
   }
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
-  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const groundSphere = new THREE.Sphere(SPHERE_CENTER, PLANET_RADIUS);
+
+  // moveTarget은 항상 평면 설계좌표(x, 0, z)로 유지한다 — 실제 이동/도착 판정이
+  // 여기서 이뤄지고, 화면에는 매 틱 planetTransform으로만 투영된다.
+  function flatDistance(a: { x: number; z: number }, b: { x: number; z: number }) {
+    return Math.hypot(a.x - b.x, a.z - b.z);
+  }
 
   function moveToScreenPoint(clientX: number, clientY: number) {
     const rect = renderer.domElement.getBoundingClientRect();
@@ -107,15 +139,16 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
     if (postboxHit.length > 0) {
       moveTarget = env.postboxStandPoint.clone();
       pendingPostboxInteract = true;
-      tripRunning = moveTarget.distanceTo(character.group.position) > RUN_DISTANCE;
+      tripRunning = flatDistance(moveTarget, simPos) > RUN_DISTANCE;
       return;
     }
 
     const hitPoint = new THREE.Vector3();
-    if (raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
-      moveTarget = clampToWalkBounds(hitPoint);
+    if (raycaster.ray.intersectSphere(groundSphere, hitPoint)) {
+      const flat = clampToWalkBounds(inversePlanetPosition(hitPoint));
+      moveTarget = new THREE.Vector3(flat.x, 0, flat.z);
       pendingPostboxInteract = false;
-      tripRunning = moveTarget.distanceTo(character.group.position) > RUN_DISTANCE;
+      tripRunning = flatDistance(moveTarget, simPos) > RUN_DISTANCE;
     }
   }
 
@@ -245,6 +278,61 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
   resizeObserver.observe(container);
   resize();
 
+  // 미니맵은 평면 시뮬레이션 좌표(env.landmarks, simPos)를 그대로 위에서 내려다보는
+  // 2D 투영이라 구면 변환이 전혀 필요 없다 — 고정된 월드 창을 원형 캔버스에 매핑한다.
+  const MINIMAP_WINDOW = { minX: -32, maxX: 34, minZ: -44, maxZ: 40 };
+  function worldToMinimap(x: number, z: number): [number, number] {
+    const w = minimapCanvas.width;
+    const h = minimapCanvas.height;
+    const u = (x - MINIMAP_WINDOW.minX) / (MINIMAP_WINDOW.maxX - MINIMAP_WINDOW.minX);
+    const v = (z - MINIMAP_WINDOW.minZ) / (MINIMAP_WINDOW.maxZ - MINIMAP_WINDOW.minZ);
+    return [u * w, v * h];
+  }
+
+  function drawMinimap() {
+    const w = minimapCanvas.width;
+    const h = minimapCanvas.height;
+    minimapCtx.clearRect(0, 0, w, h);
+
+    minimapCtx.save();
+    minimapCtx.beginPath();
+    minimapCtx.arc(w / 2, h / 2, w / 2, 0, Math.PI * 2);
+    minimapCtx.clip();
+    minimapCtx.fillStyle = "rgba(255, 255, 255, 0.85)";
+    minimapCtx.fillRect(0, 0, w, h);
+
+    minimapCtx.font = "11px 'Malgun Gothic', sans-serif";
+    minimapCtx.textAlign = "center";
+    for (const landmark of env.landmarks) {
+      const [mx, mz] = worldToMinimap(landmark.pos.x, landmark.pos.y);
+      minimapCtx.fillStyle = "#c0392b";
+      minimapCtx.beginPath();
+      minimapCtx.arc(mx, mz, 3, 0, Math.PI * 2);
+      minimapCtx.fill();
+      minimapCtx.fillStyle = "#3a3a3a";
+      minimapCtx.fillText(landmark.name, mx, mz - 6);
+    }
+
+    const [px, pz] = worldToMinimap(simPos.x, simPos.z);
+    minimapCtx.save();
+    minimapCtx.translate(px, pz);
+    minimapCtx.rotate(lastHeading);
+    minimapCtx.fillStyle = "#2b6fd8";
+    minimapCtx.beginPath();
+    minimapCtx.moveTo(0, -7);
+    minimapCtx.lineTo(5, 6);
+    minimapCtx.lineTo(-5, 6);
+    minimapCtx.closePath();
+    minimapCtx.fill();
+    minimapCtx.restore();
+
+    minimapCtx.restore();
+    minimapCtx.strokeStyle = "rgba(0, 0, 0, 0.25)";
+    minimapCtx.beginPath();
+    minimapCtx.arc(w / 2, h / 2, w / 2 - 1, 0, Math.PI * 2);
+    minimapCtx.stroke();
+  }
+
   let rafId = 0;
   let lastTime = performance.now();
 
@@ -253,9 +341,9 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
     lastTime = now;
 
     if (moveTarget) {
-      const pos = character.group.position;
+      const pos = simPos;
       const prevZ = pos.z;
-      const dx = moveTarget.x - pos.x;
+      const dx = wrapX(moveTarget.x - pos.x); // 랩을 고려한 최단 경로 방향
       const dz = moveTarget.z - pos.z;
       const distance = Math.hypot(dx, dz);
 
@@ -267,9 +355,10 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
         if (arrivedForPostbox) callbacks.onPostboxReached();
       } else {
         const step = Math.min(MOVE_SPEED * dt, distance);
-        pos.x += (dx / distance) * step;
+        pos.x = wrapX(pos.x + (dx / distance) * step);
         pos.z += (dz / distance) * step;
         character.face(dx, dz, dt);
+        lastHeading = Math.atan2(dx, dz);
         character.setMoving(true, { running: tripRunning });
 
         if (!checkpointPassed && prevZ < env.checkpointZ && pos.z >= env.checkpointZ) {
@@ -285,23 +374,41 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
 
     character.update(dt);
 
-    const followPos = character.group.position.clone().add(getFollowOffset());
-    const followLook = character.group.position.clone().add(LOOK_OFFSET);
+    // 캐릭터의 구면 위 실제 위치/표면 정렬은 매 틱 평면 시뮬레이션 좌표에서 다시 계산한다.
+    const anchorT = planetTransform(simPos.x, simPos.z, 0);
+    characterAnchor.position.copy(anchorT.position);
+    characterAnchor.quaternion.copy(anchorT.quaternion);
+
+    // 카메라 오프셋은 캐릭터의 로컬 접평면 기준(yaw/pitch/zoom)으로 계산된 뒤,
+    // 그 지점의 표면 쿼터니언으로 회전시켜 월드 좌표로 옮긴다.
+    const followPos = characterAnchor.position
+      .clone()
+      .add(getFollowOffset().applyQuaternion(characterAnchor.quaternion));
+    const followLook = characterAnchor.position
+      .clone()
+      .add(LOOK_OFFSET.clone().applyQuaternion(characterAnchor.quaternion));
+    const followUp = UP_LOCAL.clone().applyQuaternion(characterAnchor.quaternion);
 
     if (introActive) {
       introElapsed += dt;
       const t = Math.min(introElapsed / INTRO_DURATION, 1);
       const eased = easeInOutSmooth(t);
-      const introPos = villageCenter.clone().add(INTRO_CAMERA_OFFSET);
+      const introPos = villageCenterT.position
+        .clone()
+        .add(INTRO_CAMERA_OFFSET.clone().applyQuaternion(villageCenterT.quaternion));
+      const introUp = UP_LOCAL.clone().applyQuaternion(villageCenterT.quaternion);
       camera.position.lerpVectors(introPos, followPos, eased);
-      camera.lookAt(villageCenter.clone().lerp(followLook, eased));
+      camera.up.copy(introUp.lerp(followUp, eased).normalize());
+      camera.lookAt(villageCenterT.position.clone().lerp(followLook, eased));
       if (t >= 1) introActive = false;
     } else {
       const followT = 1 - Math.exp(-CAMERA_FOLLOW_SPEED * dt);
       camera.position.lerp(followPos, followT);
+      camera.up.copy(followUp);
       camera.lookAt(followLook);
     }
 
+    drawMinimap();
     outlinePipeline.render(scene, camera);
     rafId = requestAnimationFrame(tick);
   }
@@ -319,6 +426,7 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
       outlinePipeline.dispose();
       renderer.dispose();
       container.removeChild(renderer.domElement);
+      container.removeChild(minimapCanvas);
     },
     resumeAfterCheckpoint() {
       if (resumeToPostbox) {
@@ -333,11 +441,17 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
       pendingPostboxInteract = false;
       resumeToPostbox = false;
       tripRunning = false;
-      character.group.position.copy(env.spawnPoint);
+      simPos.copy(env.spawnPoint);
       character.setMoving(false);
+
+      const t = planetTransform(simPos.x, simPos.z, 0);
+      characterAnchor.position.copy(t.position);
+      characterAnchor.quaternion.copy(t.quaternion);
+
       // 순간이동이므로 카메라도 즉시 따라붙인다 — 러프하게 두면 맵 반대편에서 날아온다.
-      camera.position.copy(env.spawnPoint).add(getFollowOffset());
-      camera.lookAt(env.spawnPoint.clone().add(LOOK_OFFSET));
+      camera.position.copy(t.position).add(getFollowOffset().applyQuaternion(t.quaternion));
+      camera.up.copy(UP_LOCAL.clone().applyQuaternion(t.quaternion));
+      camera.lookAt(t.position.clone().add(LOOK_OFFSET.clone().applyQuaternion(t.quaternion)));
     },
   };
 }
