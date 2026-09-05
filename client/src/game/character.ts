@@ -212,7 +212,10 @@ export function createCharacter(): Character {
       }
     },
     undefined,
-    (err) => console.error("[character] failed to load", CLIP_FILES.idle, err)
+    (err) => {
+      console.error("[character] failed to load", CLIP_FILES.idle, err);
+      fallback.visible = true;
+    }
   );
 
   let moving = false;
