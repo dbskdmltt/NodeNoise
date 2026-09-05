@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { buildEnvironment } from "./environment";
+import { buildEnvironment, type Collider } from "./environment";
 import { createCharacter } from "./character";
 import { createOutlinePipeline } from "./outlinePipeline";
 import { PLANET_RADIUS, planetTransform, inversePlanetPosition, wrapX } from "./planet";
@@ -17,6 +17,24 @@ export interface SceneHandle {
 
 const MOVE_SPEED = 3.6;
 const ARRIVE_EPSILON = 0.08;
+const CHARACTER_RADIUS = 0.35; // 건물 콜라이더에 밀려날 때 캐릭터 자체가 차지하는 여유폭
+
+// 건물 원형 콜라이더 밖으로 위치를 밀어낸다. 클릭 이동이 매 틱 목표를 향해 직선으로
+// 다가가는 구조라, 겹칠 때마다 살짝 밀어내기만 해도 벽을 파고들지 않고 자연스럽게
+// 모서리를 타고 미끄러지듯 피해간다 — 별도의 경로 탐색 없이도 충분하다.
+function resolveCollisions(pos: { x: number; z: number }, colliders: Collider[]) {
+  for (const collider of colliders) {
+    const dx = wrapX(pos.x - collider.pos.x);
+    const dz = pos.z - collider.pos.y;
+    const dist = Math.hypot(dx, dz);
+    const minDist = collider.radius + CHARACTER_RADIUS;
+    if (dist > 0 && dist < minDist) {
+      const push = minDist - dist;
+      pos.x = wrapX(pos.x + (dx / dist) * push);
+      pos.z += (dz / dist) * push;
+    }
+  }
+}
 const RUN_DISTANCE = 4.5; // clicks farther than this trigger the run cycle instead of walk
 const CAMERA_OFFSET = new THREE.Vector3(0, 6.3, 7.4);
 const LOOK_OFFSET = new THREE.Vector3(0, 0.9, 0);
@@ -361,6 +379,7 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
         const step = Math.min(MOVE_SPEED * dt, distance);
         pos.x = wrapX(pos.x + (dx / distance) * step);
         pos.z += (dz / distance) * step;
+        resolveCollisions(pos, env.colliders);
         // character.group은 characterAnchor의 자식이라 planetTransform의 heading
         // 보정을 거치지 않는다 — 여기서도 같은 이유로 dx의 부호를 반전해서 넘겨야
         // 로컬 Y회전이 anchor의 접평면 기저와 합성됐을 때 실제 이동 방향을 향한다.

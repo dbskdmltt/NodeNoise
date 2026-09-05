@@ -18,6 +18,11 @@ export interface Landmark {
   kind?: "building" | "npc";
 }
 
+export interface Collider {
+  pos: THREE.Vector2;
+  radius: number;
+}
+
 export interface Environment {
   postbox: THREE.Object3D;
   walkBounds: WalkBounds;
@@ -25,6 +30,7 @@ export interface Environment {
   postboxStandPoint: THREE.Vector3;
   checkpointZ: number;
   landmarks: Landmark[];
+  colliders: Collider[];
 }
 
 const ROOF_COLORS = ["#a8503a", "#7a5a8a", "#4a7a8a", "#8a7a4a", "#8a4a5a"];
@@ -228,6 +234,10 @@ function buildHouse(
   house.position.copy(t.position);
   house.quaternion.copy(t.quaternion);
   scene.add(house);
+
+  // 캐릭터 충돌용 원형 콜라이더 — 실제로는 사각형이지만, 클릭 이동 특성상
+  // 원형 밀어내기가 벽을 파고들지 않으면서도 자연스럽게 미끄러지듯 피해간다.
+  return { pos: new THREE.Vector2(x, z), radius: footprint * 0.62 };
 }
 
 interface LoopHouseEntry {
@@ -244,7 +254,8 @@ function placeLoopHouses(
   startAngle: number,
   blocked: THREE.Vector2[][],
   keepOut: { pos: THREE.Vector2; radius: number }[]
-) {
+): Collider[] {
+  const colliders: Collider[] = [];
   entries.forEach(({ house, globalIndex }, j) => {
     const angle = startAngle + (j / entries.length) * Math.PI * 2;
     const radial = 1.6 + ((house.offset - 3.2) / 3.3) * 1.4;
@@ -261,33 +272,37 @@ function placeLoopHouses(
     }
 
     const rotationY = Math.atan2(roadPt.x - pos.x, roadPt.y - pos.y);
-    buildHouse(
-      scene,
-      pos.x,
-      pos.y,
-      rotationY,
-      ROOF_COLORS[globalIndex % ROOF_COLORS.length],
-      house.sizeScale,
-      house.floors,
-      isMai
+    colliders.push(
+      buildHouse(
+        scene,
+        pos.x,
+        pos.y,
+        rotationY,
+        ROOF_COLORS[globalIndex % ROOF_COLORS.length],
+        house.sizeScale,
+        house.floors,
+        isMai
+      )
     );
     scene.add(groundQuad(roadPt, pos, 0.7, "#d8cba4", 0.013));
   });
+  return colliders;
 }
 
 function buildVillage(
   scene: THREE.Scene,
   blocked: THREE.Vector2[][],
   keepOut: { pos: THREE.Vector2; radius: number }[]
-) {
+): Collider[] {
   // 집 70채를 실측 순서 그대로 외곽 순환로(2/3)와 안쪽 순환로(1/3)에 나눠 배치
   const outer: LoopHouseEntry[] = [];
   const inner: LoopHouseEntry[] = [];
   VILLAGE_HOUSES.forEach((house, globalIndex) => {
     (globalIndex % 3 === 2 ? inner : outer).push({ house, globalIndex });
   });
-  placeLoopHouses(scene, outer, OUTER_LOOP, Math.PI / 2, blocked, keepOut);
-  placeLoopHouses(scene, inner, INNER_LOOP, Math.PI / 2, blocked, keepOut);
+  const outerColliders = placeLoopHouses(scene, outer, OUTER_LOOP, Math.PI / 2, blocked, keepOut);
+  const innerColliders = placeLoopHouses(scene, inner, INNER_LOOP, Math.PI / 2, blocked, keepOut);
+  return [...outerColliders, ...innerColliders];
 }
 
 const CHURCH_MODEL_URL = "/models/Meshy_AI_Hilltop_Korean_Church_0819035724_texture.glb";
@@ -309,6 +324,8 @@ function buildChurch(scene: THREE.Scene) {
   const sign = makeTextBoard("해마루 광성교회", "#f4efe2", "#5a4a3a", 2.6, 0.6);
   sign.position.set(0, 2.2, CHURCH_FOOTPRINT / 2 + 0.5);
   church.add(sign);
+
+  return { pos: CHURCH_POS, radius: CHURCH_FOOTPRINT / 2 };
 }
 
 function buildBusStop(scene: THREE.Scene) {
@@ -425,6 +442,8 @@ function buildMart(scene: THREE.Scene) {
   mart.quaternion.copy(martT.quaternion);
   scene.add(mart);
   loadScannedModel(mart, MART_MODEL_URL, MART_FOOTPRINT);
+
+  return { pos: MART_POS, radius: MART_FOOTPRINT / 2 };
 }
 
 const CONTAINER_MODEL_URL = "/models/Meshy_AI_Industrial_Mural_Faca_0819041231_texture.glb";
@@ -445,6 +464,8 @@ function buildContainer(scene: THREE.Scene) {
   container.quaternion.copy(t.quaternion);
   scene.add(container);
   loadScannedModel(container, CONTAINER_MODEL_URL, CONTAINER_FOOTPRINT);
+
+  return { pos: new THREE.Vector2(designX, designZ), radius: CONTAINER_FOOTPRINT / 2 };
 }
 
 function buildRiver(scene: THREE.Scene, riverPts: THREE.Vector2[]) {
@@ -590,13 +611,13 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
     { pos: VILLAGE_SIGN_POS, radius: 3.4 },
     { pos: MART_POS, radius: MART_FOOTPRINT / 2 + 1.5 },
   ];
-  buildVillage(scene, houseBlocked, keepOut);
+  const houseColliders = buildVillage(scene, houseBlocked, keepOut);
 
-  buildChurch(scene);
+  const churchCollider = buildChurch(scene);
   buildBusStop(scene);
   buildVillageSign(scene);
-  buildMart(scene);
-  buildContainer(scene);
+  const martCollider = buildMart(scene);
+  const containerCollider = buildContainer(scene);
 
   buildTrees(scene, [mainStreetPts, accessPts, outerLoopPts, innerLoopPts, riverPts], accessPts);
   buildCheckpoint(scene);
@@ -625,6 +646,8 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
     ...npcLandmarks,
   ];
 
+  const colliders: Collider[] = [...houseColliders, churchCollider, martCollider, containerCollider];
+
   return {
     postbox,
     walkBounds: { minX: -27, maxX: 30, minZ: -42, maxZ: 38.5 },
@@ -632,5 +655,6 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
     postboxStandPoint: new THREE.Vector3(26.8, 0, 35.8),
     checkpointZ: CHECKPOINT_Z,
     landmarks,
+    colliders,
   };
 }
