@@ -33,7 +33,7 @@ export interface Environment {
   colliders: Collider[];
 }
 
-const ROOF_COLORS = ["#c15c3f", "#9370a8", "#5a9db0", "#c9a24f", "#b0607e"];
+const ROOF_COLORS = ["#ad5940", "#82699a", "#4f8797", "#9c8a54", "#95566d"];
 const HOUSE_BASE_FOOTPRINT = 1.6;
 const HOUSE_BASE_ROOF_RADIUS = 1.27;
 
@@ -109,8 +109,8 @@ function buildSkyDome(scene: THREE.Scene) {
   const material = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     uniforms: {
-      // 일본 여름 거리 사진 참고 — 짙은 여름 하늘색에서 지평선의 뽀얀 흰빛으로.
-      topColor: { value: new THREE.Color("#2f8fd9") },
+      // 일본 여름 거리 사진 참고 — 채도를 낮춘 여름 하늘색에서 지평선의 뽀얀 흰빛으로.
+      topColor: { value: new THREE.Color("#6aa3cc") },
       bottomColor: { value: new THREE.Color("#eaf5fb") },
     },
     vertexShader: `
@@ -617,7 +617,7 @@ function buildPostbox(scene: THREE.Scene): THREE.Object3D {
 }
 
 function buildPlanetSurface(scene: THREE.Scene) {
-  const ground = mesh(new THREE.SphereGeometry(PLANET_RADIUS, 96, 64), "#9bc678");
+  const ground = mesh(new THREE.SphereGeometry(PLANET_RADIUS, 96, 64), "#90ba74");
   scene.add(ground);
 }
 
@@ -659,7 +659,7 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
   const postbox = buildPostbox(scene);
   const npcLandmarks = buildNpcs(scene);
 
-  const hemi = new THREE.HemisphereLight("#ffffff", "#9bc678", 1.1);
+  const hemi = new THREE.HemisphereLight("#ffffff", "#90ba74", 1.1);
   scene.add(hemi);
 
   // 일본 여름 거리 사진 참고로 다시 따뜻한 톤을 살렸다 — 예전에 캐릭터 피부가
