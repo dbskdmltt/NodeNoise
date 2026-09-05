@@ -8,6 +8,7 @@ import type { LetterEntry } from "../types";
 type Stage =
   | "idle"
   | "intro-greeting"
+  | "intro-question"
   | "locked"
   | "no-draft"
   | "checkpoint-1"
@@ -113,7 +114,22 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
         <MessengerBox
           speaker="누누"
           text={"안녕! 반가워. 너랑 챗봇으로 대화하던 누누야.\n같이 편지를 보내보자!"}
-          primaryAction={{ label: "좋아!", onClick: () => setStage("idle") }}
+          primaryAction={{ label: "좋아!", onClick: () => setStage("intro-question") }}
+        />
+      )}
+
+      {stage === "intro-question" && (
+        <MessengerBox
+          speaker="누누"
+          text="편지를 보내려면 어떻게 하지?"
+          primaryAction={{
+            label: "네트워크맵을 살펴보자",
+            onClick: () => {
+              setStage("idle");
+              onGoToChat();
+            },
+          }}
+          secondaryAction={{ label: "저기 친구에게 물어보자", onClick: () => setStage("idle") }}
         />
       )}
 
