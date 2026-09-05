@@ -7,6 +7,7 @@ import type { LetterEntry } from "../types";
 
 type Stage =
   | "idle"
+  | "intro-greeting"
   | "locked"
   | "no-draft"
   | "checkpoint-1"
@@ -55,12 +56,17 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
     setStage("checkpoint-1");
   });
 
+  const handleIntroCompleteRef = useRef(() => {
+    setStage("intro-greeting");
+  });
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const handle = buildScene(container, {
       onPostboxReached: () => handlePostboxReachedRef.current(),
       onCheckpointReached: () => handleCheckpointReachedRef.current(),
+      onIntroComplete: () => handleIntroCompleteRef.current(),
     });
     sceneHandleRef.current = handle;
     return () => {
@@ -102,6 +108,14 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
       >
         {musicMuted ? "🔇" : "🔊"}
       </button>
+
+      {stage === "intro-greeting" && (
+        <MessengerBox
+          speaker="누누"
+          text={"안녕! 반가워. 너랑 챗봇으로 대화하던 누누야.\n같이 편지를 보내보자!"}
+          primaryAction={{ label: "좋아!", onClick: () => setStage("idle") }}
+        />
+      )}
 
       {stage === "locked" && (
         <MessengerBox

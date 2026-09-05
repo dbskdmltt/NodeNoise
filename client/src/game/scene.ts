@@ -8,6 +8,7 @@ import { createAmbientMusic } from "./audio";
 export interface SceneCallbacks {
   onPostboxReached: () => void;
   onCheckpointReached: () => void;
+  onIntroComplete: () => void;
 }
 
 export interface SceneHandle {
@@ -432,7 +433,10 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
       camera.position.lerpVectors(introPos, followPos, eased);
       camera.up.copy(introUp.lerp(followUp, eased).normalize());
       camera.lookAt(villageCenterT.position.clone().lerp(followLook, eased));
-      if (t >= 1) introActive = false;
+      if (t >= 1) {
+        introActive = false;
+        callbacks.onIntroComplete();
+      }
     } else {
       const followT = 1 - Math.exp(-CAMERA_FOLLOW_SPEED * dt);
       camera.position.lerp(followPos, followT);
