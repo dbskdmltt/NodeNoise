@@ -414,12 +414,18 @@ body {
   padding: 18px 20px;
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.25);
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   gap: 16px;
 }
 
 .messenger-text {
-  flex: 1;
+  /* flex:1 alone lets this shrink to its min-content width, which for Korean text
+     is a single syllable — a wide .messenger-actions (two long button labels) would
+     then squeeze it down to one character per line. A real basis plus flex-wrap on
+     the parent lets the actions drop to their own row instead when both don't fit. */
+  flex: 1 1 200px;
+  min-width: 200px;
   font-size: 15px;
   line-height: 1.6;
   color: #111;
@@ -429,9 +435,12 @@ body {
 
 .messenger-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .messenger-btn {

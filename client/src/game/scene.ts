@@ -9,6 +9,7 @@ export interface SceneCallbacks {
   onPostboxReached: () => void;
   onCheckpointReached: () => void;
   onIntroComplete: () => void;
+  onNpcHintReached: () => void;
 }
 
 export interface SceneHandle {
@@ -16,6 +17,7 @@ export interface SceneHandle {
   resumeAfterCheckpoint: () => void;
   goHome: () => void;
   setMusicMuted: (muted: boolean) => void;
+  awaitNpcHint: () => void;
 }
 
 const MOVE_SPEED = 3.6;
@@ -121,6 +123,13 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
   let introElapsed = 0;
   let introActive = true;
   let lastHeading = 0; // 미니맵 화살표용, character.face()와 같은 atan2(dx,dz)
+
+  // "저기 친구에게 물어보자" 선택 후 실제로 NPC 중 하나에게 다가가야 힌트가 뜨도록 —
+  // 어느 NPC든 상관없이(정해둔 "그 친구"가 없으므로) 가장 가까운 아무나에게 닿으면 된다.
+  const npcLandmarks = env.landmarks.filter((landmark) => landmark.kind === "npc");
+  const NPC_HINT_RADIUS = 2.4;
+  let awaitingNpcHint = false;
+  let npcHintShown = false;
 
   let orbitYaw = 0;
   let orbitPitch = 0;
@@ -407,6 +416,19 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
 
     character.update(dt);
 
+    if (awaitingNpcHint && !npcHintShown) {
+      for (const npc of npcLandmarks) {
+        const dx = wrapX(simPos.x - npc.pos.x);
+        const dz = simPos.z - npc.pos.y;
+        if (Math.hypot(dx, dz) < NPC_HINT_RADIUS) {
+          npcHintShown = true;
+          awaitingNpcHint = false;
+          callbacks.onNpcHintReached();
+          break;
+        }
+      }
+    }
+
     // 캐릭터의 구면 위 실제 위치/표면 정렬은 매 틱 평면 시뮬레이션 좌표에서 다시 계산한다.
     const anchorT = planetTransform(simPos.x, simPos.z, 0);
     characterAnchor.position.copy(anchorT.position);
@@ -467,6 +489,9 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
     },
     setMusicMuted(muted: boolean) {
       ambientMusic.setMuted(muted);
+    },
+    awaitNpcHint() {
+      awaitingNpcHint = true;
     },
     resumeAfterCheckpoint() {
       if (resumeToPostbox) {

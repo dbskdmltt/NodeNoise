@@ -62,6 +62,10 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
     setStage("intro-greeting");
   });
 
+  const handleNpcHintReachedRef = useRef(() => {
+    setStage("npc-hint");
+  });
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -69,6 +73,7 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
       onPostboxReached: () => handlePostboxReachedRef.current(),
       onCheckpointReached: () => handleCheckpointReachedRef.current(),
       onIntroComplete: () => handleIntroCompleteRef.current(),
+      onNpcHintReached: () => handleNpcHintReachedRef.current(),
     });
     sceneHandleRef.current = handle;
     return () => {
@@ -130,7 +135,13 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
               onGoToChat();
             },
           }}
-          secondaryAction={{ label: "저기 친구에게 물어보자", onClick: () => setStage("npc-hint") }}
+          secondaryAction={{
+            label: "저기 친구에게 물어보자",
+            onClick: () => {
+              setStage("idle");
+              sceneHandleRef.current?.awaitNpcHint();
+            },
+          }}
         />
       )}
 
