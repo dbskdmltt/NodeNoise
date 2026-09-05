@@ -33,7 +33,9 @@ export interface Environment {
   colliders: Collider[];
 }
 
-const ROOF_COLORS = ["#ad5940", "#82699a", "#4f8797", "#9c8a54", "#95566d"];
+// design-seeds.com "Color Serve" 팔레트(복숭아·산호·테라코타·올리브·마리골드·라임)로
+// 교체 — 테라코타를 주조색으로 두고 올리브·마리골드는 가끔 섞이는 억양으로만.
+const ROOF_COLORS = ["#c96a58", "#c96a58", "#c96a58", "#6b7a48", "#f0a94d"];
 const HOUSE_BASE_FOOTPRINT = 1.6;
 const HOUSE_BASE_ROOF_RADIUS = 1.27;
 
@@ -109,9 +111,10 @@ function buildSkyDome(scene: THREE.Scene) {
   const material = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     uniforms: {
-      // 일본 여름 거리 사진 참고 — 채도를 낮춘 여름 하늘색에서 지평선의 뽀얀 흰빛으로.
-      topColor: { value: new THREE.Color("#6aa3cc") },
-      bottomColor: { value: new THREE.Color("#eaf5fb") },
+      // 하늘을 팔레트 원색으로 물들이면 다시 촌스러워지므로, 복숭아·크림 계열로
+      // 아주 옅게만 톤을 맞추고 채도는 최대한 낮춘 중성에 가깝게 둔다.
+      topColor: { value: new THREE.Color("#e8ddd0") },
+      bottomColor: { value: new THREE.Color("#faf4ec") },
     },
     vertexShader: `
       varying vec3 vWorldPosition;
@@ -139,7 +142,7 @@ function buildSkyDome(scene: THREE.Scene) {
 // 달리 외곽선을 넣지 않아야 멀리 뜬 뭉실한 구름처럼 보인다.
 function buildCloud(scene: THREE.Scene, center: THREE.Vector3, scale: number) {
   const cloud = new THREE.Group();
-  const puffMaterial = toonMaterial("#fbfdff");
+  const puffMaterial = toonMaterial("#faf4ec");
   const puffCount = 4 + Math.floor(Math.random() * 3);
   for (let i = 0; i < puffCount; i++) {
     const puff = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), puffMaterial);
@@ -250,7 +253,7 @@ function buildHouse(
 
   const footprint = HOUSE_BASE_FOOTPRINT * sizeScale;
   const bodyHeight = floors === 2 ? 2.4 : 1.6;
-  const body = mesh(new THREE.BoxGeometry(footprint, bodyHeight, footprint), isMaiHouse ? "#f2e9cd" : "#e8d9b8");
+  const body = mesh(new THREE.BoxGeometry(footprint, bodyHeight, footprint), isMaiHouse ? "#faf1e4" : "#f2e7d8");
   body.position.set(0, bodyHeight / 2, 0);
   house.add(body);
 
@@ -458,6 +461,10 @@ function loadScannedModel(parent: THREE.Object3D, url: string, footprint: number
       const material = meshObj.material as THREE.MeshStandardMaterial;
       if (material?.isMeshStandardMaterial) {
         material.metalness = 0;
+        // roughness는 그대로 두면 스캔본에 딸려온 낮은 값 때문에 금속처럼 반짝이는
+        // 하이라이트가 남는다 — 완전히 매트하게 눌러서 카툰 소품들과 톤을 맞춘다.
+        material.roughness = 1;
+        if ("specularIntensity" in material) (material as unknown as { specularIntensity: number }).specularIntensity = 0;
         if (material.map) material.map = recolorTexture(material.map, "saturate(128%) brightness(114%)");
       }
     });
@@ -503,8 +510,9 @@ function buildContainer(scene: THREE.Scene) {
 }
 
 function buildRiver(scene: THREE.Scene, riverPts: THREE.Vector2[]) {
-  buildPath(scene, riverPts, 3.8, "#79c0dc", 0.008);
-  buildPath(scene, riverPts, 2.2, "#9ad4ea", 0.009);
+  // 비비드한 하늘색 대신 팔레트의 세이지/초록 쪽으로 눌러서 튀지 않게 한다.
+  buildPath(scene, riverPts, 3.8, "#6fa89a", 0.008);
+  buildPath(scene, riverPts, 2.2, "#9cc7ba", 0.009);
 }
 
 function buildTree(scene: THREE.Scene, x: number, z: number, scale = 1) {
@@ -617,7 +625,7 @@ function buildPostbox(scene: THREE.Scene): THREE.Object3D {
 }
 
 function buildPlanetSurface(scene: THREE.Scene) {
-  const ground = mesh(new THREE.SphereGeometry(PLANET_RADIUS, 96, 64), "#90ba74");
+  const ground = mesh(new THREE.SphereGeometry(PLANET_RADIUS, 96, 64), "#8a9a5c");
   scene.add(ground);
 }
 
@@ -659,7 +667,7 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
   const postbox = buildPostbox(scene);
   const npcLandmarks = buildNpcs(scene);
 
-  const hemi = new THREE.HemisphereLight("#ffffff", "#90ba74", 1.1);
+  const hemi = new THREE.HemisphereLight("#ffffff", "#8a9a5c", 1.1);
   scene.add(hemi);
 
   // 일본 여름 거리 사진 참고로 다시 따뜻한 톤을 살렸다 — 예전에 캐릭터 피부가
