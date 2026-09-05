@@ -115,9 +115,14 @@ export function createCharacter(): Character {
 
   const fallback = buildPrimitiveFallback();
   // 실제 GLTF가 로드되기 전까지 잠깐 뜨는 조악한 임시 캐릭터가 눈에 띄어서, 로드
-  // 실패시에만 보이는 진짜 "폴백"으로 바꾼다 — 로딩 중에는 그냥 안 보이는 게 낫다.
+  // 실패시에만 보이는 진짜 "폴백"으로 바꾼다 — 다만 모바일 네트워크 등에서 7MB
+  // 모델 다운로드가 늦어지면 그동안 캐릭터가 통째로 안 보이는 게 더 나쁘므로,
+  // 일정 시간 안에 안 끝나면 폴백을 미리 보여준다.
   fallback.visible = false;
   group.add(fallback);
+  const slowLoadTimer = setTimeout(() => {
+    fallback.visible = true;
+  }, 500);
 
   let bodyForBob = fallback; // whichever visual root we bob up/down while walking (fallback only)
   const legs: THREE.Object3D[] = [fallback.children[0], fallback.children[1]]; // leftLeg, rightLeg
@@ -179,6 +184,7 @@ export function createCharacter(): Character {
         }
       }
 
+      clearTimeout(slowLoadTimer);
       fallback.visible = false;
       group.add(model);
       bodyForBob = model;
@@ -214,6 +220,7 @@ export function createCharacter(): Character {
     undefined,
     (err) => {
       console.error("[character] failed to load", CLIP_FILES.idle, err);
+      clearTimeout(slowLoadTimer);
       fallback.visible = true;
     }
   );
