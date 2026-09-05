@@ -24,11 +24,21 @@ const EDGE_FRAGMENT_SHADER = `
   uniform float normalThreshold;
   uniform float depthThreshold;
   uniform vec2 outlineFade;
+  uniform float paperGrainStrength;
+  uniform vec3 warmTint;
+  uniform float warmTintStrength;
+  uniform float vignetteStrength;
   varying vec2 vUv;
 
   float linearDepth(float d) {
     float z = d * 2.0 - 1.0;
     return (2.0 * cameraNear * cameraFar) / (cameraFar + cameraNear - z * (cameraFar - cameraNear));
+  }
+
+  // 시드 텍스처 없이 즉석에서 만드는 종이 결 노이즈 — 픽셀마다 살짝 다른 밝기를
+  // 얹어 평평한 카툰 면에 수채화 특유의 우둘투둘한 질감을 흉내낸다.
+  float paperGrain(vec2 uv) {
+    return fract(sin(dot(uv * 900.0, vec2(12.9898, 78.233))) * 43758.5453);
   }
 
   void main() {
@@ -57,7 +67,17 @@ const EDGE_FRAGMENT_SHADER = `
     edge *= fade;
 
     vec4 color = texture2D(tDiffuse, vUv);
-    gl_FragColor = mix(color, vec4(outlineColor, 1.0), edge);
+    vec3 result = mix(color.rgb, outlineColor, edge);
+
+    // 수채화풍 마감: 종이 결 + 여름 햇살에 가까운 따뜻한 색보정 + 화면 가장자리를
+    // 살짝 눌러주는 비네트. 실제 물감 번짐은 아니지만 손그림에 가까운 질감을 낸다.
+    float grain = paperGrain(vUv);
+    result += (grain - 0.5) * paperGrainStrength;
+    result = mix(result, result * warmTint, warmTintStrength);
+    float vignette = smoothstep(0.98, 0.35, length(vUv - 0.5));
+    result *= mix(vignetteStrength, 1.0, vignette);
+
+    gl_FragColor = vec4(result, 1.0);
   }
 `;
 
@@ -94,6 +114,10 @@ export function createOutlinePipeline(renderer: THREE.WebGLRenderer): OutlinePip
       normalThreshold: { value: 0.15 },
       depthThreshold: { value: 0.01 },
       outlineFade: { value: new THREE.Vector2(60, 200) },
+      paperGrainStrength: { value: 0.035 },
+      warmTint: { value: new THREE.Vector3(1.07, 1.01, 0.9) },
+      warmTintStrength: { value: 0.4 },
+      vignetteStrength: { value: 0.88 },
     },
     depthTest: false,
     depthWrite: false,

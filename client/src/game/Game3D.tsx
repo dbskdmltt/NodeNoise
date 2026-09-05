@@ -32,6 +32,7 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
   const [stage, setStage] = useState<Stage>("idle");
   const [censoredText, setCensoredText] = useState("");
   const [alreadyArchived, setAlreadyArchived] = useState(false);
+  const [musicMuted, setMusicMuted] = useState(false);
 
   const stateRef = useRef({ letterUnlocked, draftLetter, alreadyArchived });
   stateRef.current = { letterUnlocked, draftLetter, alreadyArchived };
@@ -88,6 +89,18 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
         onClick={() => sceneHandleRef.current?.goHome()}
       >
         🏠
+      </button>
+
+      <button
+        className="music-toggle-button"
+        title={musicMuted ? "배경음 켜기" : "배경음 끄기"}
+        onClick={() => {
+          const next = !musicMuted;
+          setMusicMuted(next);
+          sceneHandleRef.current?.setMusicMuted(next);
+        }}
+      >
+        {musicMuted ? "🔇" : "🔊"}
       </button>
 
       {stage === "locked" && (

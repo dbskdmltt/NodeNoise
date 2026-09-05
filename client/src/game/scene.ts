@@ -3,6 +3,7 @@ import { buildEnvironment, type Collider } from "./environment";
 import { createCharacter } from "./character";
 import { createOutlinePipeline } from "./outlinePipeline";
 import { PLANET_RADIUS, planetTransform, inversePlanetPosition, wrapX } from "./planet";
+import { createAmbientMusic } from "./audio";
 
 export interface SceneCallbacks {
   onPostboxReached: () => void;
@@ -13,6 +14,7 @@ export interface SceneHandle {
   dispose: () => void;
   resumeAfterCheckpoint: () => void;
   goHome: () => void;
+  setMusicMuted: (muted: boolean) => void;
 }
 
 const MOVE_SPEED = 3.6;
@@ -77,6 +79,7 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
   container.appendChild(renderer.domElement);
 
   const outlinePipeline = createOutlinePipeline(renderer);
+  const ambientMusic = createAmbientMusic();
 
   // 미니맵: 렌더러 캔버스와 나란히 두는 별도 2D 캔버스. React 리렌더 없이 scene.ts가
   // 다른 실시간 시각 요소처럼 직접 소유하고 매 틱 그린다.
@@ -193,6 +196,9 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
   }
 
   function handlePointerDown(event: PointerEvent) {
+    // 브라우저 자동재생 정책상 AudioContext는 실제 사용자 제스처 안에서 시작해야
+    // 한다 — 인트로 중 첫 클릭이라도 유효한 제스처이므로 여기서 바로 시작한다.
+    ambientMusic.start();
     if (introActive) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
 
@@ -450,9 +456,13 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
       renderer.domElement.removeEventListener("pointercancel", handlePointerUp);
       renderer.domElement.removeEventListener("wheel", handleWheel);
       outlinePipeline.dispose();
+      ambientMusic.dispose();
       renderer.dispose();
       container.removeChild(renderer.domElement);
       container.removeChild(minimapCanvas);
+    },
+    setMusicMuted(muted: boolean) {
+      ambientMusic.setMuted(muted);
     },
     resumeAfterCheckpoint() {
       if (resumeToPostbox) {

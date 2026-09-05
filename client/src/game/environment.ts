@@ -33,7 +33,7 @@ export interface Environment {
   colliders: Collider[];
 }
 
-const ROOF_COLORS = ["#a8503a", "#7a5a8a", "#4a7a8a", "#8a7a4a", "#8a4a5a"];
+const ROOF_COLORS = ["#c15c3f", "#9370a8", "#5a9db0", "#c9a24f", "#b0607e"];
 const HOUSE_BASE_FOOTPRINT = 1.6;
 const HOUSE_BASE_ROOF_RADIUS = 1.27;
 
@@ -109,8 +109,9 @@ function buildSkyDome(scene: THREE.Scene) {
   const material = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     uniforms: {
-      topColor: { value: new THREE.Color("#8fd7d1") },
-      bottomColor: { value: new THREE.Color("#e7f4ee") },
+      // 일본 여름 거리 사진 참고 — 짙은 여름 하늘색에서 지평선의 뽀얀 흰빛으로.
+      topColor: { value: new THREE.Color("#2f8fd9") },
+      bottomColor: { value: new THREE.Color("#eaf5fb") },
     },
     vertexShader: `
       varying vec3 vWorldPosition;
@@ -132,6 +133,39 @@ function buildSkyDome(scene: THREE.Scene) {
   });
   const sky = new THREE.Mesh(geometry, material);
   scene.add(sky);
+}
+
+// 뭉게구름 — 참고 사진 속 여름 적운을 낮은 폴리곤 뭉치로 흉내낸다. 카툰 소품과
+// 달리 외곽선을 넣지 않아야 멀리 뜬 뭉실한 구름처럼 보인다.
+function buildCloud(scene: THREE.Scene, center: THREE.Vector3, scale: number) {
+  const cloud = new THREE.Group();
+  const puffMaterial = toonMaterial("#fbfdff");
+  const puffCount = 4 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < puffCount; i++) {
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), puffMaterial);
+    const angle = (i / puffCount) * Math.PI * 2;
+    puff.position.set(Math.cos(angle) * 1.3, Math.sin(angle * 0.6) * 0.35, Math.sin(angle) * 0.7);
+    const puffScale = 0.7 + Math.random() * 0.5;
+    puff.scale.setScalar(puffScale);
+    cloud.add(puff);
+  }
+  cloud.scale.setScalar(scale);
+  cloud.position.copy(center);
+  cloud.lookAt(0, 0, 0);
+  scene.add(cloud);
+}
+
+function buildClouds(scene: THREE.Scene) {
+  const CLOUD_COUNT = 12;
+  const CLOUD_ALTITUDE_RADIUS = 105; // 하늘 돔(반지름 120) 가까이 멀리 띄워 작고 가볍게 보이도록
+  for (let i = 0; i < CLOUD_COUNT; i++) {
+    // 마을 위쪽 하늘에 몰아서, 정수리 근처(극점)는 피해 자연스럽게 흩뿌린다.
+    const theta = Math.random() * Math.PI * 2;
+    const phi = THREE.MathUtils.degToRad(15 + Math.random() * 50);
+    const dir = new THREE.Vector3(Math.cos(phi) * Math.sin(theta), Math.sin(phi), Math.cos(phi) * Math.cos(theta));
+    const center = dir.multiplyScalar(CLOUD_ALTITUDE_RADIUS);
+    buildCloud(scene, center, 2 + Math.random() * 2);
+  }
 }
 
 // Builds one quad on the planet surface between two (x, z) *design* points, `width`
@@ -583,7 +617,7 @@ function buildPostbox(scene: THREE.Scene): THREE.Object3D {
 }
 
 function buildPlanetSurface(scene: THREE.Scene) {
-  const ground = mesh(new THREE.SphereGeometry(PLANET_RADIUS, 96, 64), "#8fbf7a");
+  const ground = mesh(new THREE.SphereGeometry(PLANET_RADIUS, 96, 64), "#9bc678");
   scene.add(ground);
 }
 
@@ -595,6 +629,7 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
   const riverPts = sampleCurve(RIVER_CTRL, 80);
 
   buildSkyDome(scene);
+  buildClouds(scene);
   buildPlanetSurface(scene);
 
   buildPath(scene, outerLoopPts, 1.4, "#c9b98f", 0.011);
@@ -624,12 +659,13 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
   const postbox = buildPostbox(scene);
   const npcLandmarks = buildNpcs(scene);
 
-  const hemi = new THREE.HemisphereLight("#ffffff", "#8fbf7a", 1.1);
+  const hemi = new THREE.HemisphereLight("#ffffff", "#9bc678", 1.1);
   scene.add(hemi);
 
-  // 기존 "#fff6e0"(따뜻한 크림색) 햇빛이 씬의 거의 모든 표면(카툰 건물 포함)에
-  // 노란 색조를 얹고 있었다 — 중립에 가까운 백색으로 바꿔서 노란끼를 뺐다.
-  const sun = new THREE.DirectionalLight("#f5f7fb", 1.8);
+  // 일본 여름 거리 사진 참고로 다시 따뜻한 톤을 살렸다 — 예전에 캐릭터 피부가
+  // 과포화로 튀어서 중립광으로 바꿨던 적이 있지만, 그건 텍스처 쪽(character.ts의
+  // recolorTexture)에서 이미 채도를 깎아 고쳐뒀으므로 조명을 다시 데워도 안전하다.
+  const sun = new THREE.DirectionalLight("#fff2d9", 1.8);
   sun.position.set(6, 9, 5);
   scene.add(sun);
 
