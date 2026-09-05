@@ -9,6 +9,7 @@ type Stage =
   | "idle"
   | "intro-greeting"
   | "intro-question"
+  | "npc-hint"
   | "locked"
   | "no-draft"
   | "checkpoint-1"
@@ -129,7 +130,15 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
               onGoToChat();
             },
           }}
-          secondaryAction={{ label: "저기 친구에게 물어보자", onClick: () => setStage("idle") }}
+          secondaryAction={{ label: "저기 친구에게 물어보자", onClick: () => setStage("npc-hint") }}
+        />
+      )}
+
+      {stage === "npc-hint" && (
+        <MessengerBox
+          speaker="마을 주민"
+          text={"음... 편지를 보내려면 검문소를 지나야 해.\n저 안쪽으로 가서 검문소를 찾아가봐!"}
+          primaryAction={{ label: "알겠어!", onClick: () => setStage("idle") }}
         />
       )}
 
