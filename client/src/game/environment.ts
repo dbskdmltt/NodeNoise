@@ -3,6 +3,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { toonMaterial, recolorTexture } from "./toon";
 import { VILLAGE_HOUSES, type HousePlacement } from "../data/villageLayout";
 import { PLANET_RADIUS, planetPosition, planetTransform } from "./planet";
+import { buildNpcs } from "./npc";
 
 export interface WalkBounds {
   minX: number;
@@ -14,6 +15,7 @@ export interface WalkBounds {
 export interface Landmark {
   name: string;
   pos: THREE.Vector2;
+  kind?: "building" | "npc";
 }
 
 export interface Environment {
@@ -599,6 +601,7 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
   buildTrees(scene, [mainStreetPts, accessPts, outerLoopPts, innerLoopPts, riverPts], accessPts);
   buildCheckpoint(scene);
   const postbox = buildPostbox(scene);
+  const npcLandmarks = buildNpcs(scene);
 
   const hemi = new THREE.HemisphereLight("#ffffff", "#8fbf7a", 1.1);
   scene.add(hemi);
@@ -619,6 +622,7 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
     { name: "버스정류장", pos: BUS_STOP_POS },
     { name: "검문소", pos: CHECKPOINT_POS },
     { name: "우체통", pos: POSTBOX_POS },
+    ...npcLandmarks,
   ];
 
   return {

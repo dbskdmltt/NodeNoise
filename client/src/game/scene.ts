@@ -304,13 +304,17 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
     minimapCtx.font = "11px 'Malgun Gothic', sans-serif";
     minimapCtx.textAlign = "center";
     for (const landmark of env.landmarks) {
+      const isNpc = landmark.kind === "npc";
       const [mx, mz] = worldToMinimap(landmark.pos.x, landmark.pos.y);
-      minimapCtx.fillStyle = "#c0392b";
+      minimapCtx.fillStyle = isNpc ? "#2b6fd8" : "#c0392b";
       minimapCtx.beginPath();
-      minimapCtx.arc(mx, mz, 3, 0, Math.PI * 2);
+      minimapCtx.arc(mx, mz, isNpc ? 2 : 3, 0, Math.PI * 2);
       minimapCtx.fill();
-      minimapCtx.fillStyle = "#3a3a3a";
-      minimapCtx.fillText(landmark.name, mx, mz - 6);
+      // NPC 5명의 이름표까지 다 그리면 미니맵이 너무 빽빽해져서, 건물 랜드마크만 라벨을 단다.
+      if (!isNpc) {
+        minimapCtx.fillStyle = "#3a3a3a";
+        minimapCtx.fillText(landmark.name, mx, mz - 6);
+      }
     }
 
     const [px, pz] = worldToMinimap(simPos.x, simPos.z);
@@ -357,7 +361,10 @@ export function buildScene(container: HTMLDivElement, callbacks: SceneCallbacks)
         const step = Math.min(MOVE_SPEED * dt, distance);
         pos.x = wrapX(pos.x + (dx / distance) * step);
         pos.z += (dz / distance) * step;
-        character.face(dx, dz, dt);
+        // character.group은 characterAnchor의 자식이라 planetTransform의 heading
+        // 보정을 거치지 않는다 — 여기서도 같은 이유로 dx의 부호를 반전해서 넘겨야
+        // 로컬 Y회전이 anchor의 접평면 기저와 합성됐을 때 실제 이동 방향을 향한다.
+        character.face(-dx, dz, dt);
         lastHeading = Math.atan2(dx, dz);
         character.setMoving(true, { running: tripRunning });
 

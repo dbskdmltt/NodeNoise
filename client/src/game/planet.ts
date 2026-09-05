@@ -49,7 +49,11 @@ export function planetTransform(
 
   const basis = new THREE.Matrix4().makeBasis(tangentX, normal, tangentZ);
   const frameQuat = new THREE.Quaternion().setFromRotationMatrix(basis);
-  const headingQuat = new THREE.Quaternion().setFromAxisAngle(UP, headingY);
+  // tangentX는 normal×tangentZ로 강제한 우수좌표계라 "+x 방향"이 아니라 그 반대를
+  // 가리킨다(오른손좌표계를 만들려면 normal·tangentZ가 고정된 이상 X축은 이렇게밖에
+  // 못 나온다). heading을 그대로 로컬 Y축에 태우면 atan2(dx,dz) 관례와 부호가
+  // 뒤집혀서 결과 방향이 좌우로 미러링되므로, 여기서 미리 부호를 반전해 보정한다.
+  const headingQuat = new THREE.Quaternion().setFromAxisAngle(UP, -headingY);
   const quaternion = frameQuat.multiply(headingQuat);
 
   return { position, quaternion };
