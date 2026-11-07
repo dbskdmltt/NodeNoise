@@ -65,6 +65,7 @@ export function ChatPanel({
       </div>
 
       <div className="chat-hint">← 지도의 노드를 클릭하면 해당 주제로 대화해요</div>
+      <div className="chat-hint">이 대화는 작품 기록을 위해 저장돼요. 개인정보는 입력하지 마세요.</div>
 
       <div className="quick-replies">
         {QUICK_REPLIES.map((q) => (
