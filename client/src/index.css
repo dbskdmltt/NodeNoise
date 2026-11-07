@@ -324,6 +324,64 @@ body {
   display: block;
   width: 100%;
   height: 100%;
+  /* 터치 드래그를 궤도 회전에 쓰므로, 브라우저 기본 스크롤/핀치줌이 제스처를
+     가로채 pointercancel을 발생시키지 않도록 막는다. */
+  touch-action: none;
+}
+
+.home-button {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.home-button:hover {
+  transform: scale(1.08);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+.music-toggle-button {
+  position: absolute;
+  top: 68px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.music-toggle-button:hover {
+  transform: scale(1.08);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* .game-canvas canvas가 자식 캔버스를 전부 100% 크기로 강제하므로, 미니맵은
+   클래스 두 개짜리 선택자로 그 규칙보다 우선순위를 높여 덮어쓴다. */
+.game-canvas .minimap-canvas {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
 }
 
 .messenger-overlay {
@@ -356,12 +414,18 @@ body {
   padding: 18px 20px;
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.25);
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   gap: 16px;
 }
 
 .messenger-text {
-  flex: 1;
+  /* flex:1 alone lets this shrink to its min-content width, which for Korean text
+     is a single syllable — a wide .messenger-actions (two long button labels) would
+     then squeeze it down to one character per line. A real basis plus flex-wrap on
+     the parent lets the actions drop to their own row instead when both don't fit. */
+  flex: 1 1 200px;
+  min-width: 200px;
   font-size: 15px;
   line-height: 1.6;
   color: #111;
@@ -371,9 +435,12 @@ body {
 
 .messenger-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .messenger-btn {

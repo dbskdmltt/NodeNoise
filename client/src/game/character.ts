@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { addOutline, toonMaterial } from "./toon";
+import { addOutline, toonMaterial, recolorTexture } from "./toon";
 
 export interface Character {
   group: THREE.Group;
@@ -114,7 +114,15 @@ export function createCharacter(): Character {
   const group = new THREE.Group();
 
   const fallback = buildPrimitiveFallback();
+  // 실제 GLTF가 로드되기 전까지 잠깐 뜨는 조악한 임시 캐릭터가 눈에 띄어서, 로드
+  // 실패시에만 보이는 진짜 "폴백"으로 바꾼다 — 다만 모바일 네트워크 등에서 7MB
+  // 모델 다운로드가 늦어지면 그동안 캐릭터가 통째로 안 보이는 게 더 나쁘므로,
+  // 일정 시간 안에 안 끝나면 폴백을 미리 보여준다.
+  fallback.visible = false;
   group.add(fallback);
+  const slowLoadTimer = setTimeout(() => {
+    fallback.visible = true;
+  }, 500);
 
   let bodyForBob = fallback; // whichever visual root we bob up/down while walking (fallback only)
   const legs: THREE.Object3D[] = [fallback.children[0], fallback.children[1]]; // leftLeg, rightLeg
@@ -158,8 +166,25 @@ export function createCharacter(): Character {
         meshObj.castShadow = false;
         meshObj.receiveShadow = false;
         addOutline(meshObj);
+
+        // Meshy 익스포트는 MeshPhysicalMaterial에 metalness 1 + specularIntensity 1이
+        // 기본값으로 들어 있어서, 환경맵 없는 이 씬에서는 애매하게 반짝이는 하이라이트만
+        // 생기고 나머지는 어둡게 죽는다. 카툰풍 씬에는 광택이 필요 없으므로 전부 꺼서
+        // 매트한 텍스처 그대로 보이게 한다.
+        const material = meshObj.material as THREE.MeshPhysicalMaterial;
+        if (material?.isMeshStandardMaterial) {
+          material.metalness = 0;
+          material.roughness = 1;
+          if ("specularIntensity" in material) material.specularIntensity = 0;
+
+          // 피부·옷·머리가 한 장의 텍스처에 같이 있어서 부위별로 따로 손볼 수는
+          // 없지만, 피부 쪽이 특히 채도 높은 주황으로 튀어서 전체를 살짝
+          // 덜어낸다 — 누누의 원래 갈색 톤은 유지하면서 과포화만 가라앉힌다.
+          if (material.map) material.map = recolorTexture(material.map, "saturate(62%) brightness(99%)");
+        }
       }
 
+      clearTimeout(slowLoadTimer);
       fallback.visible = false;
       group.add(model);
       bodyForBob = model;
@@ -193,7 +218,11 @@ export function createCharacter(): Character {
       }
     },
     undefined,
-    (err) => console.error("[character] failed to load", CLIP_FILES.idle, err)
+    (err) => {
+      console.error("[character] failed to load", CLIP_FILES.idle, err);
+      clearTimeout(slowLoadTimer);
+      fallback.visible = true;
+    }
   );
 
   let moving = false;

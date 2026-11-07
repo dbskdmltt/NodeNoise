@@ -7,6 +7,9 @@ import type { LetterEntry } from "../types";
 
 type Stage =
   | "idle"
+  | "intro-greeting"
+  | "intro-question"
+  | "npc-hint"
   | "locked"
   | "no-draft"
   | "checkpoint-1"
@@ -32,6 +35,7 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
   const [stage, setStage] = useState<Stage>("idle");
   const [censoredText, setCensoredText] = useState("");
   const [alreadyArchived, setAlreadyArchived] = useState(false);
+  const [musicMuted, setMusicMuted] = useState(false);
 
   const stateRef = useRef({ letterUnlocked, draftLetter, alreadyArchived });
   stateRef.current = { letterUnlocked, draftLetter, alreadyArchived };
@@ -54,12 +58,22 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
     setStage("checkpoint-1");
   });
 
+  const handleIntroCompleteRef = useRef(() => {
+    setStage("intro-greeting");
+  });
+
+  const handleNpcHintReachedRef = useRef(() => {
+    setStage("npc-hint");
+  });
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const handle = buildScene(container, {
       onPostboxReached: () => handlePostboxReachedRef.current(),
       onCheckpointReached: () => handleCheckpointReachedRef.current(),
+      onIntroComplete: () => handleIntroCompleteRef.current(),
+      onNpcHintReached: () => handleNpcHintReachedRef.current(),
     });
     sceneHandleRef.current = handle;
     return () => {
@@ -81,6 +95,63 @@ export function Game3D({ letterUnlocked, draftLetter, onGoToChat, onGoToArchive,
   return (
     <div className="game-panel">
       <div className="game-canvas" ref={containerRef} />
+
+      <button
+        className="home-button"
+        title="마을 중심으로 돌아가기"
+        onClick={() => sceneHandleRef.current?.goHome()}
+      >
+        🏠
+      </button>
+
+      <button
+        className="music-toggle-button"
+        title={musicMuted ? "배경음 켜기" : "배경음 끄기"}
+        onClick={() => {
+          const next = !musicMuted;
+          setMusicMuted(next);
+          sceneHandleRef.current?.setMusicMuted(next);
+        }}
+      >
+        {musicMuted ? "🔇" : "🔊"}
+      </button>
+
+      {stage === "intro-greeting" && (
+        <MessengerBox
+          speaker="누누"
+          text={"안녕! 반가워. 너랑 챗봇으로 대화하던 누누야.\n같이 편지를 보내보자!"}
+          primaryAction={{ label: "좋아!", onClick: () => setStage("intro-question") }}
+        />
+      )}
+
+      {stage === "intro-question" && (
+        <MessengerBox
+          speaker="누누"
+          text="편지를 보내려면 어떻게 하지?"
+          primaryAction={{
+            label: "네트워크맵을 살펴보자",
+            onClick: () => {
+              setStage("idle");
+              onGoToChat();
+            },
+          }}
+          secondaryAction={{
+            label: "저기 친구에게 물어보자",
+            onClick: () => {
+              setStage("idle");
+              sceneHandleRef.current?.awaitNpcHint();
+            },
+          }}
+        />
+      )}
+
+      {stage === "npc-hint" && (
+        <MessengerBox
+          speaker="마을 주민"
+          text={"음... 편지를 보내려면 검문소를 지나야 해.\n저 안쪽으로 가서 검문소를 찾아가봐!"}
+          primaryAction={{ label: "알겠어!", onClick: () => setStage("idle") }}
+        />
+      )}
 
       {stage === "locked" && (
         <MessengerBox
