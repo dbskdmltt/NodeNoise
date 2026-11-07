@@ -11,11 +11,18 @@ export interface SendChatResult {
   mode: "llm" | "offline";
 }
 
+// Random per-visit id so the recorded conversation can be grouped without identifying anyone.
+// Deliberately not persisted: a reload starts a new session.
+const sessionId =
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+
 export async function sendChat({ message, topicId, history }: SendChatArgs): Promise<SendChatResult> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, topicId, history }),
+    body: JSON.stringify({ message, topicId, history, sessionId }),
   });
 
   if (!res.ok) {

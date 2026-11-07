@@ -1,11 +1,13 @@
 import path from "node:path";
 import fs from "node:fs";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import { getReply, TOPICS } from "./llm.js";
 import { getLetters, addLetter } from "./letters.js";
+import { appendChatLog, readChatLogs } from "./chatLog.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_DIST = path.join(__dirname, "..", "client", "dist");
@@ -21,7 +23,7 @@ app.get("/api/topics", (_req, res) => {
 });
 
 app.post("/api/chat", async (req, res) => {
-  const { message, topicId, history } = req.body ?? {};
+  const { message, topicId, history, sessionId } = req.body ?? {};
 
   if (typeof message !== "string" || !message.trim()) {
     res.status(400).json({ error: "message is required" });
@@ -30,11 +32,25 @@ app.post("/api/chat", async (req, res) => {
 
   try {
     const { reply, mode } = await getReply({ message, topicId, history });
+    appendChatLog({ sessionId, topicId, message, reply, mode });
     res.json({ reply, mode });
   } catch (err) {
     console.error("[/api/chat] failed:", err);
     res.status(500).json({ error: "failed to generate reply" });
   }
+});
+
+// Read-only export of recorded conversations. Disabled unless ADMIN_TOKEN is set.
+app.get("/api/admin/chat-logs", (req, res) => {
+  const expected = process.env.ADMIN_TOKEN;
+  const provided = req.get("x-admin-token") ?? "";
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected ?? "");
+  if (!expected || a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  res.json({ logs: readChatLogs() });
 });
 
 app.get("/api/letters", (_req, res) => {
