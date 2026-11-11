@@ -1,0 +1,149 @@
+{
+  "core": {
+    "볼음도": {
+      "group": "서부 거점",
+      "total": 5718,
+      "mention": 4521,
+      "mention_pct": 79.1,
+      "by_channel": {
+        "blog": 2277,
+        "news": 1679,
+        "cafe": 565
+      }
+    },
+    "중부 하천": {
+      "group": "중부 거점",
+      "total": 14581,
+      "mention": 10746,
+      "mention_pct": 73.7,
+      "by_channel": {
+        "blog": 4833,
+        "news": 3369,
+        "cafe": 2544
+      }
+    },
+    "고성 해안": {
+      "group": "동부 거점",
+      "total": 10857,
+      "mention": 4271,
+      "mention_pct": 39.3,
+      "by_channel": {
+        "blog": 2071,
+        "news": 931,
+        "cafe": 1269
+      }
+    },
+    "옹진 덕적도": {
+      "group": "비교 섬",
+      "total": 9866,
+      "mention": 8928,
+      "mention_pct": 90.5,
+      "by_channel": {
+        "blog": 3158,
+        "news": 3071,
+        "cafe": 2699
+      }
+    }
+  },
+  "background": {
+    "강화": {
+      "group": "서부",
+      "total": 12613,
+      "mention": 10150,
+      "mention_pct": 80.5,
+      "by_channel": {
+        "blog": 3929,
+        "news": 3347,
+        "cafe": 2874
+      }
+    },
+    "김포": {
+      "group": "서부",
+      "total": 13075,
+      "mention": 10105,
+      "mention_pct": 77.3,
+      "by_channel": {
+        "blog": 3226,
+        "news": 3931,
+        "cafe": 2948
+      }
+    },
+    "파주": {
+      "group": "서부",
+      "total": 13241,
+      "mention": 9569,
+      "mention_pct": 72.3,
+      "by_channel": {
+        "blog": 2908,
+        "news": 4182,
+        "cafe": 2479
+      }
+    },
+    "연천": {
+      "group": "중부",
+      "total": 10937,
+      "mention": 9547,
+      "mention_pct": 87.3,
+      "by_channel": {
+        "blog": 3244,
+        "news": 3642,
+        "cafe": 2661
+      }
+    },
+    "철원": {
+      "group": "중부",
+      "total": 10625,
+      "mention": 9044,
+      "mention_pct": 85.1,
+      "by_channel": {
+        "blog": 3053,
+        "news": 3550,
+        "cafe": 2441
+      }
+    },
+    "화천": {
+      "group": "중부",
+      "total": 9019,
+      "mention": 6113,
+      "mention_pct": 67.8,
+      "by_channel": {
+        "blog": 1889,
+        "news": 2233,
+        "cafe": 1991
+      }
+    },
+    "양구": {
+      "group": "동부",
+      "total": 10807,
+      "mention": 8017,
+      "mention_pct": 74.2,
+      "by_channel": {
+        "blog": 2334,
+        "news": 3531,
+        "cafe": 2152
+      }
+    },
+    "인제": {
+      "group": "동부",
+      "total": 8144,
+      "mention": 6802,
+      "mention_pct": 83.5,
+      "by_channel": {
+        "blog": 2155,
+        "news": 2774,
+        "cafe": 1873
+      }
+    },
+    "고성": {
+      "group": "동부",
+      "total": 11179,
+      "mention": 7751,
+      "mention_pct": 69.3,
+      "by_channel": {
+        "blog": 2766,
+        "news": 2704,
+        "cafe": 2281
+      }
+    }
+  }
+}
